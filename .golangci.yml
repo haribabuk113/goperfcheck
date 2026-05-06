@@ -9,23 +9,23 @@ linters:
     - staticcheck
     - unused
     - misspell
+  settings:
+    govet:
+      enable:
+        - shadow
+  exclusions:
+    rules:
+      - path: checker/
+        linters: [errcheck]
 
 formatters:
   enable:
     - goimports
-
-linters-settings:
-  govet:
-    enable:
-      - shadow
-  gofmt:
-    simplify: true
-  goimports:
-    local-prefixes: github.com/haribabuk113/goperfcheck
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/haribabuk113/goperfcheck
 
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude-rules:
-    - path: checker/
-      linters: [errcheck]

@@ -35,6 +35,8 @@ import (
 	"github.com/haribabuk113/goperfcheck/checker"
 )
 
+const version = "0.1.0"
+
 func main() {
 	dir := flag.String("dir", ".", "root directory to scan (default: current directory)")
 	skipVendor := flag.Bool("skip-vendor", true, "skip the vendor/ directory")
@@ -42,7 +44,13 @@ func main() {
 	severity := flag.String("severity", "INFO", "minimum severity to report: INFO | WARN | ERROR")
 	gitStaged := flag.Bool("git-staged", false, "only check Go files staged for the next git commit")
 	output := flag.String("output", "", "write report to a Markdown file instead of stdout (e.g. -output report.md)")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("goperfcheck v%s\n", version)
+		return
+	}
 
 	minSev := parseSeverity(*severity)
 
