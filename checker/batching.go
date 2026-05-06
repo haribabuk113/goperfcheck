@@ -19,11 +19,11 @@ func (c *BatchingChecker) Name() string { return "Batching" }
 // batchCandidates maps receiver variable names to method names that benefit from batching
 var batchCandidates = map[string]map[string]bool{
 	// Database / ORM
-	"db":       {"Exec": true, "Query": true, "QueryRow": true, "Insert": true, "Create": true, "Save": true},
-	"tx":       {"Exec": true, "Query": true},
-	"gorm":     {"Create": true, "Save": true, "Delete": true},
-	"sqlDB":    {"Exec": true, "Query": true},
-	"session":  {"Query": true, "Exec": true},
+	"db":      {"Exec": true, "Query": true, "QueryRow": true, "Insert": true, "Create": true, "Save": true},
+	"tx":      {"Exec": true, "Query": true},
+	"gorm":    {"Create": true, "Save": true, "Delete": true},
+	"sqlDB":   {"Exec": true, "Query": true},
+	"session": {"Query": true, "Exec": true},
 
 	// Redis / cache
 	"rdb":    {"Set": true, "Get": true, "HSet": true, "HGet": true, "Del": true, "ZAdd": true},

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,6 +28,20 @@ var checkerCategory = map[string]string{
 	"Batching":        "Batching Operations",
 }
 
+// ew is a write-error accumulator: the first Fprintf error is stored and all
+// subsequent writes are skipped, so callers only need to check err once at the end.
+type ew struct {
+	w   *bufio.Writer
+	err error
+}
+
+func (e *ew) printf(format string, args ...any) {
+	if e.err != nil {
+		return
+	}
+	_, e.err = fmt.Fprintf(e.w, format, args...)
+}
+
 func issueEmoji(s checker.Severity) string {
 	switch s {
 	case checker.SeverityError:
@@ -38,40 +53,45 @@ func issueEmoji(s checker.Severity) string {
 	}
 }
 
-func writeMarkdownReport(path string, issues []checker.Issue, dir string) error {
+func writeMarkdownReport(path string, issues []checker.Issue, dir string) (retErr error) {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil && retErr == nil {
+			retErr = cerr
+		}
+	}()
 
+	w := &ew{w: bufio.NewWriter(f)}
 	absDir, _ := filepath.Abs(dir)
 
-	fmt.Fprintf(f, "# goperfcheck Performance Report\n\n")
-	fmt.Fprintf(f, "| | |\n|---|---|\n")
-	fmt.Fprintf(f, "| **Directory** | `%s` |\n", absDir)
-	fmt.Fprintf(f, "| **Date** | %s |\n", time.Now().Format("2006-01-02"))
-	fmt.Fprintf(f, "| **Total issues** | %d |\n\n", len(issues))
+	w.printf("# goperfcheck Performance Report\n\n")
+	w.printf("| | |\n|---|---|\n")
+	w.printf("| **Directory** | `%s` |\n", absDir)
+	w.printf("| **Date** | %s |\n", time.Now().Format("2006-01-02"))
+	w.printf("| **Total issues** | %d |\n\n", len(issues))
 
 	if len(issues) == 0 {
-		fmt.Fprintf(f, "✅ No performance issues found.\n")
-		return nil
+		w.printf("✅ No performance issues found.\n")
+		if w.err != nil {
+			return w.err
+		}
+		return w.w.Flush()
 	}
 
 	// ── Summary table ──────────────────────────────────────────────────────────
-	// Group issues by checker, preserving the canonical checker order.
 	type categorySummary struct {
-		name    string
-		title   string
-		errors  int
-		warns   int
-		infos   int
-		issues  []checker.Issue
+		name   string
+		title  string
+		errors int
+		warns  int
+		infos  int
+		issues []checker.Issue
 	}
 
 	byChecker := make(map[string]*categorySummary)
-	// Preserve the order in which checkers first appear (already sorted by
-	// file+line, so the first occurrence gives a stable ordering).
 	var order []string
 	for _, iss := range issues {
 		if _, seen := byChecker[iss.Checker]; !seen {
@@ -93,29 +113,27 @@ func writeMarkdownReport(path string, issues []checker.Issue, dir string) error 
 		}
 		cs.issues = append(cs.issues, iss)
 	}
-	// Sort categories alphabetically by title for a consistent report.
 	sort.Slice(order, func(i, j int) bool {
 		return byChecker[order[i]].title < byChecker[order[j]].title
 	})
 
-	fmt.Fprintf(f, "## Summary\n\n")
-	fmt.Fprintf(f, "| Category | 🔴 Error | 🟡 Warning | 🔵 Info | Total |\n")
-	fmt.Fprintf(f, "|----------|:--------:|:---------:|:------:|:-----:|\n")
+	w.printf("## Summary\n\n")
+	w.printf("| Category | 🔴 Error | 🟡 Warning | 🔵 Info | Total |\n")
+	w.printf("|----------|:--------:|:---------:|:------:|:-----:|\n")
 	for _, name := range order {
 		cs := byChecker[name]
 		total := cs.errors + cs.warns + cs.infos
-		fmt.Fprintf(f, "| [%s](#%s) | %d | %d | %d | **%d** |\n",
+		w.printf("| [%s](#%s) | %d | %d | %d | **%d** |\n",
 			cs.title, mdAnchor(cs.title), cs.errors, cs.warns, cs.infos, total)
 	}
-	fmt.Fprintf(f, "\n---\n\n")
+	w.printf("\n---\n\n")
 
 	// ── Per-category detail sections ──────────────────────────────────────────
 	for _, name := range order {
 		cs := byChecker[name]
 
-		fmt.Fprintf(f, "## %s\n\n", cs.title)
+		w.printf("## %s\n\n", cs.title)
 
-		// Severity badge line
 		var badges []string
 		if cs.errors > 0 {
 			badges = append(badges, fmt.Sprintf("🔴 **%d error(s)**", cs.errors))
@@ -126,35 +144,37 @@ func writeMarkdownReport(path string, issues []checker.Issue, dir string) error 
 		if cs.infos > 0 {
 			badges = append(badges, fmt.Sprintf("🔵 **%d info(s)**", cs.infos))
 		}
-		fmt.Fprintf(f, "%s\n\n", strings.Join(badges, " · "))
+		w.printf("%s\n\n", strings.Join(badges, " · "))
 
-		// Rule link (from the first issue that has one)
 		for _, iss := range cs.issues {
 			if iss.Rule != "" {
-				fmt.Fprintf(f, "> %s\n\n", iss.Rule)
+				w.printf("> %s\n\n", iss.Rule)
 				break
 			}
 		}
 
-		// One block per issue
 		for _, iss := range cs.issues {
 			rel, _ := filepath.Rel(dir, iss.File)
 			if rel == "" {
 				rel = iss.File
 			}
-			fmt.Fprintf(f, "**`%s:%d`** %s `[%s]`  \n", rel, iss.Line, issueEmoji(iss.Severity), iss.Severity)
-			fmt.Fprintf(f, "⚠ %s  \n", iss.Message)
+			w.printf("**`%s:%d`** %s `[%s]`  \n", rel, iss.Line, issueEmoji(iss.Severity), iss.Severity)
+			w.printf("⚠ %s  \n", iss.Message)
 			if iss.Suggestion != "" {
-				fmt.Fprintf(f, "💡 %s\n", iss.Suggestion)
+				w.printf("💡 %s\n", iss.Suggestion)
 			}
-			fmt.Fprintf(f, "\n")
+			w.printf("\n")
 		}
 
-		fmt.Fprintf(f, "---\n\n")
+		w.printf("---\n\n")
 	}
 
-	fmt.Fprintf(f, "*Generated by [goperfcheck](https://goperf.dev)*\n")
-	return nil
+	w.printf("*Generated by [goperfcheck](https://goperf.dev)*\n")
+
+	if w.err != nil {
+		return w.err
+	}
+	return w.w.Flush()
 }
 
 // mdAnchor converts a section title to the GitHub Markdown anchor format.

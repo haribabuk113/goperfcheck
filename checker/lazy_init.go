@@ -18,14 +18,14 @@ func (c *LazyInitChecker) Name() string { return "LazyInit" }
 
 // expensiveInitCalls are functions typically called for one-time setup.
 var expensiveInitCalls = map[string]map[string]bool{
-	"sql":  {"Open": true},
-	"gorm": {"Open": true},
+	"sql":   {"Open": true},
+	"gorm":  {"Open": true},
 	"redis": {"Dial": true, "NewClient": true, "NewClusterClient": true},
 	"mongo": {"Connect": true},
-	"grpc": {"Dial": true, "NewServer": true},
-	"http": {"ListenAndServe": true, "ListenAndServeTLS": true},
-	"net":  {"Listen": true, "Dial": true, "DialTCP": true},
-	"os":   {"Open": true, "Create": true},
+	"grpc":  {"Dial": true, "NewServer": true},
+	"http":  {"ListenAndServe": true, "ListenAndServeTLS": true},
+	"net":   {"Listen": true, "Dial": true, "DialTCP": true},
+	"os":    {"Open": true, "Create": true},
 }
 
 func (c *LazyInitChecker) Check(fset *token.FileSet, file *ast.File) []Issue {

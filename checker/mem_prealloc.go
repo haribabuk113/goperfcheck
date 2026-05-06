@@ -20,7 +20,7 @@ const defaultCapHint = "8"
 //     reallocations (~4x slower, ~19x more allocations in benchmarks).
 //   - make(map[K]V) without a size hint causes rehashing as the map grows.
 //
-// Size-hint inference
+// # Size-hint inference
 //
 // The checker tries to derive the best capacity hint from the surrounding code:
 //

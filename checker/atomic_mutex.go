@@ -146,13 +146,12 @@ func (c *AtomicMutexChecker) isUnlockCall(stmt ast.Stmt) bool {
 }
 
 func (c *AtomicMutexChecker) isSimpleIncDec(stmt ast.Stmt) bool {
-	switch stmt.(type) {
+	switch s := stmt.(type) {
 	case *ast.IncDecStmt:
+		_ = s
 		return true
 	case *ast.AssignStmt:
-		// x += 1 or x -= 1
-		asgn := stmt.(*ast.AssignStmt)
-		if asgn.Tok.String() == "+=" || asgn.Tok.String() == "-=" {
+		if s.Tok.String() == "+=" || s.Tok.String() == "-=" {
 			return true
 		}
 	}

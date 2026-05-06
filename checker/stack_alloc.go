@@ -18,21 +18,21 @@ func (c *StackAllocChecker) Name() string { return "StackAlloc" }
 
 // primitiveTypes are small types where returning by value avoids escape.
 var primitiveTypes = map[string]bool{
-	"int":    true,
-	"int8":   true,
-	"int16":  true,
-	"int32":  true,
-	"int64":  true,
-	"uint":   true,
-	"uint8":  true,
-	"uint16": true,
-	"uint32": true,
-	"uint64": true,
+	"int":     true,
+	"int8":    true,
+	"int16":   true,
+	"int32":   true,
+	"int64":   true,
+	"uint":    true,
+	"uint8":   true,
+	"uint16":  true,
+	"uint32":  true,
+	"uint64":  true,
 	"float32": true,
 	"float64": true,
-	"bool":   true,
-	"byte":   true,
-	"rune":   true,
+	"bool":    true,
+	"byte":    true,
+	"rune":    true,
 }
 
 func (c *StackAllocChecker) Check(fset *token.FileSet, file *ast.File) []Issue {
