@@ -1,7 +1,7 @@
 # Build output
-goperfcheck
 *.exe
 *.out
+report.md
 
 # Test & coverage
 coverage.out

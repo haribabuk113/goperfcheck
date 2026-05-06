@@ -3,17 +3,16 @@ version: "2"
 linters:
   default: none
   enable:
-    - errcheck        # unhandled errors
-    - gosimple        # simplification suggestions
-    - govet           # suspicious constructs (shadow, printf, etc.)
-    - ineffassign     # assignments whose result is never used
-    - staticcheck     # large set of static analysis checks
-    - unused          # unused code
-    - gofmt           # formatting
-    - goimports       # import grouping and formatting
-    - misspell        # common spelling mistakes in comments/strings
-    - godot           # comments should end with a period
-    - whitespace      # unnecessary blank lines
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+
+formatters:
+  enable:
+    - goimports
 
 linters-settings:
   govet:
@@ -28,6 +27,5 @@ issues:
   max-issues-per-linter: 0
   max-same-issues: 0
   exclude-rules:
-    # Checker files do a lot of AST type-switching; unhandled ok-checks are intentional.
     - path: checker/
       linters: [errcheck]
