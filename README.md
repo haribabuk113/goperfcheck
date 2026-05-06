@@ -84,6 +84,13 @@ go build -o goperfcheck ./cmd/goperfcheck
 ```
 This is useful as a pre-commit hook: it runs the checker only on the diff you are about to commit rather than the entire repository, keeping feedback fast.
 
+### Write a Markdown report instead of terminal output:
+```bash
+./goperfcheck -output report.md
+./goperfcheck -dir ./myproject -output report.md -severity WARN
+```
+Issues are grouped by category (Memory Preallocation, Goroutine Pools, etc.) with a summary table at the top, followed by a detailed section per category showing severity, file, line, message, and fix suggestion.
+
 ### Full option list:
 ```bash
 ./goperfcheck -help

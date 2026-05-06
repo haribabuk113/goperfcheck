@@ -17,7 +17,7 @@
 //
 // Usage:
 //
-//	goperfcheck [-dir <path>] [-severity INFO|WARN|ERROR] [-git-staged]
+//	goperfcheck [-dir <path>] [-severity INFO|WARN|ERROR] [-git-staged] [-output report.md]
 package main
 
 import (
@@ -41,6 +41,7 @@ func main() {
 	skipTests := flag.Bool("skip-tests", false, "skip *_test.go files")
 	severity := flag.String("severity", "INFO", "minimum severity to report: INFO | WARN | ERROR")
 	gitStaged := flag.Bool("git-staged", false, "only check Go files staged for the next git commit")
+	output := flag.String("output", "", "write report to a Markdown file instead of stdout (e.g. -output report.md)")
 	flag.Parse()
 
 	minSev := parseSeverity(*severity)
@@ -125,6 +126,20 @@ func main() {
 		}
 		return allIssues[i].Line < allIssues[j].Line
 	})
+
+	if *output != "" {
+		if err := writeMarkdownReport(*output, allIssues, *dir); err != nil {
+			fmt.Fprintf(os.Stderr, "report error: %v\n", err)
+			os.Exit(1)
+		}
+		if len(allIssues) == 0 {
+			fmt.Printf("✓ No issues found — report written to %s\n", *output)
+		} else {
+			fmt.Printf("Report written to %s (%d issue(s))\n", *output, len(allIssues))
+			os.Exit(1)
+		}
+		return
+	}
 
 	if len(allIssues) == 0 {
 		if *gitStaged {
