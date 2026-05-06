@@ -11,7 +11,15 @@ A comprehensive static analysis tool that checks Go code against all performance
 The tool checks for violations across these categories:
 
 ### 1. **Memory Management**
-- **MemPrealloc**: Detects `append()` in loops without preallocated capacity and `make(map)` calls without size hints
+- **MemPrealloc**: Detects `append()` in loops without preallocated capacity and `make(map)` calls without size hints.
+  The checker infers the best capacity hint directly from the surrounding code:
+  - `for _, v := range items` → suggests `make([]T, 0, len(items))`
+  - `for i := 0; i < n; i++` → suggests `make([]T, 0, n)`
+  - `for i := 0; i <= n; i++` → suggests `make([]T, 0, n+1)`
+  - `m := make(map[K]V)` followed by `for _, v := range items { m[...] = ... }` → suggests `make(map[K]V, len(items))`
+  - When no size can be inferred, it falls back to a conservative default of **8**
+
+  **Why default 8 beats no hint**: Omitting a capacity causes the runtime to copy the backing array ≈log₂(finalLen) times as it doubles. Preallocating 8 slots eliminates the first three doublings (cap 0→1→2→4→8) — the most expensive ones relative to the work done. For maps, Go rehashes at a load-factor of ~6.5/8, so even `make(map[K]V, 8)` avoids the first rehash entirely. The memory cost (8×sizeof(element)) is negligible because those bytes would be allocated anyway once the data structure grows.
 - **ObjectPool**: Flags high-churn allocations (bytes.Buffer, bufio.Writer, etc.) in loops that could use `sync.Pool`
 - **StructAlign**: Detects misaligned struct fields (small before large) that waste padding memory
 
@@ -68,6 +76,13 @@ go build -o goperfcheck ./cmd/goperfcheck
 ```bash
 ./goperfcheck -skip-tests
 ```
+
+### Check only files staged for the next git commit:
+```bash
+./goperfcheck -git-staged
+./goperfcheck -git-staged -severity WARN
+```
+This is useful as a pre-commit hook: it runs the checker only on the diff you are about to commit rather than the entire repository, keeping feedback fast.
 
 ### Full option list:
 ```bash

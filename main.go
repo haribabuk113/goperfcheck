@@ -17,15 +17,17 @@
 //
 // Usage:
 //
-//	goperfcheck [-dir <path>] [-severity INFO|WARN|ERROR]
+//	goperfcheck [-dir <path>] [-severity INFO|WARN|ERROR] [-git-staged]
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -38,6 +40,7 @@ func main() {
 	skipVendor := flag.Bool("skip-vendor", true, "skip the vendor/ directory")
 	skipTests := flag.Bool("skip-tests", false, "skip *_test.go files")
 	severity := flag.String("severity", "INFO", "minimum severity to report: INFO | WARN | ERROR")
+	gitStaged := flag.Bool("git-staged", false, "only check Go files staged for the next git commit")
 	flag.Parse()
 
 	minSev := parseSeverity(*severity)
@@ -46,33 +49,15 @@ func main() {
 	fset := token.NewFileSet()
 	var allIssues []checker.Issue
 
-	err := filepath.Walk(*dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			base := filepath.Base(path)
-			if *skipVendor && base == "vendor" {
-				return filepath.SkipDir
-			}
-			if strings.HasPrefix(base, ".") {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, ".go") {
-			return nil
-		}
+	checkFile := func(path string) {
 		if *skipTests && strings.HasSuffix(path, "_test.go") {
-			return nil
+			return
 		}
-
 		file, parseErr := parser.ParseFile(fset, path, nil, parser.AllErrors)
 		if parseErr != nil {
 			fmt.Fprintf(os.Stderr, "parse error %s: %v\n", path, parseErr)
-			return nil
+			return
 		}
-
 		for _, c := range allCheckers {
 			for _, issue := range c.Check(fset, file) {
 				if severityLevel(issue.Severity) >= severityLevel(minSev) {
@@ -80,12 +65,54 @@ func main() {
 				}
 			}
 		}
-		return nil
-	})
+	}
 
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "walk error: %v\n", err)
-		os.Exit(1)
+	if *gitStaged {
+		root, absErr := filepath.Abs(*dir)
+		if absErr != nil {
+			fmt.Fprintf(os.Stderr, "abs error: %v\n", absErr)
+			os.Exit(1)
+		}
+		cmd := exec.Command("git", "diff", "--name-only", "--cached", "--diff-filter=d")
+		cmd.Dir = root
+		out, cmdErr := cmd.Output()
+		if cmdErr != nil {
+			fmt.Fprintf(os.Stderr, "git error: %v\n", cmdErr)
+			os.Exit(1)
+		}
+		lines := bytes.Split(bytes.TrimSpace(out), []byte("\n"))
+		for _, line := range lines {
+			name := strings.TrimSpace(string(line))
+			if name == "" || !strings.HasSuffix(name, ".go") {
+				continue
+			}
+			checkFile(filepath.Join(root, name))
+		}
+	} else {
+		err := filepath.Walk(*dir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				base := filepath.Base(path)
+				if *skipVendor && base == "vendor" {
+					return filepath.SkipDir
+				}
+				if strings.HasPrefix(base, ".") {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if !strings.HasSuffix(path, ".go") {
+				return nil
+			}
+			checkFile(path)
+			return nil
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "walk error: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	// Deduplicate issues (can occur with nested loops)
@@ -100,7 +127,11 @@ func main() {
 	})
 
 	if len(allIssues) == 0 {
-		fmt.Printf("✓ No performance issues found in %s\n", *dir)
+		if *gitStaged {
+			fmt.Printf("✓ No performance issues found in staged files\n")
+		} else {
+			fmt.Printf("✓ No performance issues found in %s\n", *dir)
+		}
 		return
 	}
 
