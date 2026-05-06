@@ -1,0 +1,152 @@
+// goperfcheck is a static analysis tool that verifies Go code against the
+// performance guidelines from https://goperf.dev.
+//
+// It scans a repository and reports violations of best practices in:
+//   - Memory allocation and preallocation
+//   - Object pooling patterns
+//   - Struct field alignment
+//   - Interface boxing
+//   - Zero-copy techniques
+//   - Goroutine worker pools
+//   - Context management
+//   - Buffered I/O
+//   - Atomic operations vs mutexes
+//   - Lazy initialization
+//   - Stack allocations
+//   - Batching operations
+//
+// Usage:
+//
+//	goperfcheck [-dir <path>] [-severity INFO|WARN|ERROR]
+package main
+
+import (
+	"flag"
+	"fmt"
+	"go/parser"
+	"go/token"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"goperfcheck/checker"
+)
+
+func main() {
+	dir := flag.String("dir", ".", "root directory to scan (default: current directory)")
+	skipVendor := flag.Bool("skip-vendor", true, "skip the vendor/ directory")
+	skipTests := flag.Bool("skip-tests", false, "skip *_test.go files")
+	severity := flag.String("severity", "INFO", "minimum severity to report: INFO | WARN | ERROR")
+	flag.Parse()
+
+	minSev := parseSeverity(*severity)
+
+	allCheckers := checker.AllCheckers()
+	fset := token.NewFileSet()
+	var allIssues []checker.Issue
+
+	err := filepath.Walk(*dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			base := filepath.Base(path)
+			if *skipVendor && base == "vendor" {
+				return filepath.SkipDir
+			}
+			if strings.HasPrefix(base, ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		if *skipTests && strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		file, parseErr := parser.ParseFile(fset, path, nil, parser.AllErrors)
+		if parseErr != nil {
+			fmt.Fprintf(os.Stderr, "parse error %s: %v\n", path, parseErr)
+			return nil
+		}
+
+		for _, c := range allCheckers {
+			for _, issue := range c.Check(fset, file) {
+				if severityLevel(issue.Severity) >= severityLevel(minSev) {
+					allIssues = append(allIssues, issue)
+				}
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "walk error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Deduplicate issues (can occur with nested loops)
+	allIssues = checker.DedupeIssues(allIssues)
+
+	// Sort by file, then line
+	sort.Slice(allIssues, func(i, j int) bool {
+		if allIssues[i].File != allIssues[j].File {
+			return allIssues[i].File < allIssues[j].File
+		}
+		return allIssues[i].Line < allIssues[j].Line
+	})
+
+	if len(allIssues) == 0 {
+		fmt.Printf("✓ No performance issues found in %s\n", *dir)
+		return
+	}
+
+	// Print results grouped by file
+	prevFile := ""
+	for _, issue := range allIssues {
+		rel, _ := filepath.Rel(*dir, issue.File)
+		if rel == "" {
+			rel = issue.File
+		}
+		if rel != prevFile {
+			fmt.Printf("\n📁 %s\n", rel)
+			prevFile = rel
+		}
+		fmt.Printf("   [%s] %s:%d:%d\n", issue.Severity, issue.Checker, issue.Line, issue.Column)
+		fmt.Printf("   ⚠  %s\n", issue.Message)
+		if issue.Suggestion != "" {
+			fmt.Printf("   💡 %s\n", issue.Suggestion)
+		}
+	}
+
+	fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	fmt.Printf("Found %d performance issue(s)\n", len(allIssues))
+
+	// Exit with error code if any issues found
+	os.Exit(1)
+}
+
+func parseSeverity(s string) checker.Severity {
+	switch strings.ToUpper(s) {
+	case "ERROR":
+		return checker.SeverityError
+	case "WARN", "WARNING":
+		return checker.SeverityWarning
+	default:
+		return checker.SeverityInfo
+	}
+}
+
+func severityLevel(s checker.Severity) int {
+	switch s {
+	case checker.SeverityError:
+		return 3
+	case checker.SeverityWarning:
+		return 2
+	default:
+		return 1
+	}
+}

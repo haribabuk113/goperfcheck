@@ -1,0 +1,88 @@
+// Package checker provides AST-based Go performance rule checkers
+// derived from https://goperf.dev.
+package checker
+
+import (
+	"go/ast"
+	"go/token"
+)
+
+// Severity of the detected performance issue.
+type Severity string
+
+const (
+	SeverityError   Severity = "ERROR"
+	SeverityWarning Severity = "WARN"
+	SeverityInfo    Severity = "INFO"
+)
+
+// Issue represents one performance problem found in source code.
+type Issue struct {
+	Checker    string
+	File       string
+	Line       int
+	Column     int
+	Severity   Severity
+	Message    string
+	Rule       string
+	Suggestion string
+}
+
+// Checker is implemented by every performance rule.
+type Checker interface {
+	Name() string
+	Check(fset *token.FileSet, file *ast.File) []Issue
+}
+
+// nodePos extracts (filename, line, column) from any AST node.
+func nodePos(fset *token.FileSet, node ast.Node) (file string, line, col int) {
+	p := fset.Position(node.Pos())
+	return p.Filename, p.Line, p.Column
+}
+
+// callName returns the (package, funcName) pair for a call expression,
+// e.g. "sync" + "NewMutex" for sync.NewMutex().
+// For plain ident calls (append, make, new) package is "".
+func callName(call *ast.CallExpr) (pkg, fn string, ok bool) {
+	switch f := call.Fun.(type) {
+	case *ast.Ident:
+		return "", f.Name, true
+	case *ast.SelectorExpr:
+		if id, isID := f.X.(*ast.Ident); isID {
+			return id.Name, f.Sel.Name, true
+		}
+	}
+	return "", "", false
+}
+
+// walkLoopBodies calls fn once for every for/range loop body reachable
+// from root (depth-first, including nested loops).
+func walkLoopBodies(root ast.Node, fn func(body *ast.BlockStmt)) {
+	ast.Inspect(root, func(n ast.Node) bool {
+		switch s := n.(type) {
+		case *ast.ForStmt:
+			if s.Body != nil {
+				fn(s.Body)
+			}
+		case *ast.RangeStmt:
+			if s.Body != nil {
+				fn(s.Body)
+			}
+		}
+		return true
+	})
+}
+
+// dedupeIssues removes issues with identical (file, line, col, checker, message).
+func DedupeIssues(issues []Issue) []Issue {
+	seen := make(map[string]struct{}, len(issues))
+	out := issues[:0:0]
+	for _, iss := range issues {
+		key := iss.File + ":" + string(rune(iss.Line)) + ":" + string(rune(iss.Column)) + ":" + iss.Checker + ":" + iss.Message
+		if _, exists := seen[key]; !exists {
+			seen[key] = struct{}{}
+			out = append(out, iss)
+		}
+	}
+	return out
+}
