@@ -62,7 +62,7 @@ func f(items []string) map[string]int {
 	for i, v := range items { m[v] = i }
 	return m
 }`,
-			wantN:   1,
+			wantN: 1,
 			// Hint should be len(items) — verified by checking suggestion in a separate test.
 		},
 	}
