@@ -1,5 +1,9 @@
 # goperfcheck — Go Performance Static Analyzer
 
+<p align="center">
+  <img src="assets/mascot.png" alt="goperfcheck mascot" width="200"/>
+</p>
+
 [![CI](https://github.com/haribabuk113/goperfcheck/actions/workflows/ci.yml/badge.svg)](https://github.com/haribabuk113/goperfcheck/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/haribabuk113/goperfcheck.svg)](https://pkg.go.dev/github.com/haribabuk113/goperfcheck)
 [![Go Report Card](https://goreportcard.com/badge/github.com/haribabuk113/goperfcheck)](https://goreportcard.com/report/github.com/haribabuk113/goperfcheck)
