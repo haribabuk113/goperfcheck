@@ -1,13 +1,14 @@
 BINARY  := goperfcheck
 MODULE  := github.com/haribabuk113/goperfcheck
+CMD     := ./cmd/goperfcheck
 
-.PHONY: build test lint vet fmt install clean
+.PHONY: build test lint vet fmt install clean cover
 
 build:
-	go build -o $(BINARY) .
+	go build -o $(BINARY) $(CMD)
 
 install:
-	go install $(MODULE)@latest
+	go install $(MODULE)/cmd/goperfcheck@latest
 
 test:
 	go test -race ./...

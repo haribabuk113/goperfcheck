@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/haribabuk113/goperfcheck/actions/workflows/ci.yml/badge.svg)](https://github.com/haribabuk113/goperfcheck/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/haribabuk113/goperfcheck.svg)](https://pkg.go.dev/github.com/haribabuk113/goperfcheck)
+[![Go Report Card](https://goreportcard.com/badge/github.com/haribabuk113/goperfcheck)](https://goreportcard.com/report/github.com/haribabuk113/goperfcheck)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A static analysis tool that checks Go code against all performance best practices from **https://goperf.dev**.
@@ -46,14 +47,15 @@ The tool checks for violations across these categories:
 
 **Install directly with Go (recommended):**
 ```bash
-go install github.com/haribabuk113/goperfcheck@latest
+go install github.com/haribabuk113/goperfcheck/cmd/goperfcheck@latest
 ```
 
 **Build from source:**
 ```bash
 git clone https://github.com/haribabuk113/goperfcheck.git
 cd goperfcheck
-go build -o goperfcheck .
+make build        # produces ./goperfcheck
+# or: go build -o goperfcheck ./cmd/goperfcheck
 ```
 
 ## Usage
