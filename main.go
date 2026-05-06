@@ -32,7 +32,7 @@ import (
 	"sort"
 	"strings"
 
-	"goperfcheck/checker"
+	"github.com/haribabuk113/goperfcheck/checker"
 )
 
 func main() {

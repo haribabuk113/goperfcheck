@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"goperfcheck/checker"
+	"github.com/haribabuk113/goperfcheck/checker"
 )
 
 // checkerCategory maps internal checker names to human-readable section titles.

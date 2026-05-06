@@ -1,6 +1,10 @@
-# goperfcheck - Go Performance Static Analyzer
+# goperfcheck — Go Performance Static Analyzer
 
-A comprehensive static analysis tool that checks Go code against all performance best practices from **https://goperf.dev**.
+[![CI](https://github.com/haribabuk113/goperfcheck/actions/workflows/ci.yml/badge.svg)](https://github.com/haribabuk113/goperfcheck/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/haribabuk113/goperfcheck.svg)](https://pkg.go.dev/github.com/haribabuk113/goperfcheck)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+A static analysis tool that checks Go code against all performance best practices from **https://goperf.dev**.
 
 ## Overview
 
@@ -40,17 +44,16 @@ The tool checks for violations across these categories:
 
 ## Installation
 
-The tool is built as a Go module command. Build it with:
-
+**Install directly with Go (recommended):**
 ```bash
-cd cmd/goperfcheck
-go build -o goperfcheck
+go install github.com/haribabuk113/goperfcheck@latest
 ```
 
-Or from the repo root:
-
+**Build from source:**
 ```bash
-go build -o goperfcheck ./cmd/goperfcheck
+git clone https://github.com/haribabuk113/goperfcheck.git
+cd goperfcheck
+go build -o goperfcheck .
 ```
 
 ## Usage
