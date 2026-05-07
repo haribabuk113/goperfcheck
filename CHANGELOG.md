@@ -9,6 +9,28 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+- `-file` flag to check a single `.go` file instead of walking a directory
+- `-checker` flag to run only one named checker (case-insensitive); prints valid
+  names if the given name is not recognised
+- `-format json` flag to emit all issues as a JSON array on stdout — useful for
+  editor integrations and downstream tooling; exit codes unchanged (0 = clean,
+  1 = issues, 2 = tool error)
+- `-version` flag to print the tool version and exit
+- SARIF 2.1.0 output: when `-output` ends in `.sarif` the report is written in
+  SARIF format instead of Markdown, enabling native GitHub Code Scanning
+  annotations in pull requests via `github/codeql-action/upload-sarif`
+- `SECURITY.md` documenting the supported security model and how to report
+  vulnerabilities
+- `CODE_OF_CONDUCT.md` (Contributor Covenant v2.1)
+- `examples/` directory with two ready-to-compile programmatic usage examples:
+  `examples/basic/` (full directory scan) and `examples/single_checker/`
+
+### Security
+- Fixed path traversal vulnerability in `-git-staged` mode: file paths returned
+  by `git diff --name-only` that contain `..` after `filepath.Clean` are now
+  silently skipped before being joined with the repository root
+
 ---
 
 ## [0.1.0] — 2026-05-06

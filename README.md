@@ -86,6 +86,18 @@ make build        # produces ./goperfcheck
 ./goperfcheck -skip-tests
 ```
 
+### Check a single file:
+```bash
+./goperfcheck -file ./pkg/handler.go
+```
+
+### Run only one checker:
+```bash
+./goperfcheck -checker mem-prealloc
+./goperfcheck -checker context-misuse -severity ERROR
+```
+Pass an unknown name and the tool prints all valid checker names.
+
 ### Check only files staged for the next git commit:
 ```bash
 ./goperfcheck -git-staged
@@ -93,12 +105,44 @@ make build        # produces ./goperfcheck
 ```
 This is useful as a pre-commit hook: it runs the checker only on the diff you are about to commit rather than the entire repository, keeping feedback fast.
 
-### Write a Markdown report instead of terminal output:
+### Emit JSON for editor integrations:
+```bash
+./goperfcheck -format json
+./goperfcheck -file ./pkg/cache.go -format json
+```
+Output is a JSON array of issue objects. Fields: `checker`, `file`, `line`,
+`column`, `severity`, `message`, and optionally `rule` and `suggestion`.
+
+### Write a Markdown report:
 ```bash
 ./goperfcheck -output report.md
 ./goperfcheck -dir ./myproject -output report.md -severity WARN
 ```
-Issues are grouped by category (Memory Preallocation, Goroutine Pools, etc.) with a summary table at the top, followed by a detailed section per category showing severity, file, line, message, and fix suggestion.
+Issues are grouped by category with a summary table and per-category detail sections.
+
+### Write a SARIF report for GitHub Code Scanning:
+```bash
+./goperfcheck -dir . -output results.sarif
+```
+When `-output` ends in `.sarif`, the report is written as SARIF 2.1.0 instead of
+Markdown. Upload it to GitHub to get inline annotations on pull requests:
+
+```yaml
+# .github/workflows/perf.yml
+- name: Run goperfcheck
+  run: goperfcheck -dir . -output results.sarif
+  continue-on-error: true
+
+- name: Upload to GitHub Code Scanning
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: results.sarif
+```
+
+### Print version:
+```bash
+./goperfcheck -version
+```
 
 ### Full option list:
 ```bash

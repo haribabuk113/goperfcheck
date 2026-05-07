@@ -17,7 +17,7 @@
 //
 // Usage:
 //
-//	goperfcheck [-dir <path>] [-file <file.go>] [-checker <name>] [-severity INFO|WARN|ERROR] [-git-staged] [-output report.md]
+//	goperfcheck [-dir <path>] [-file <file.go>] [-checker <name>] [-severity INFO|WARN|ERROR] [-git-staged] [-output report.md|report.sarif]
 package main
 
 import (
@@ -46,7 +46,7 @@ func main() {
 	skipTests := flag.Bool("skip-tests", false, "skip *_test.go files")
 	severity := flag.String("severity", "INFO", "minimum severity to report: INFO | WARN | ERROR")
 	gitStaged := flag.Bool("git-staged", false, "only check Go files staged for the next git commit")
-	output := flag.String("output", "", "write report to a Markdown file instead of stdout (e.g. -output report.md)")
+	output := flag.String("output", "", "write report to a file: .md for Markdown, .sarif for SARIF 2.1.0 (GitHub Code Scanning)")
 	format := flag.String("format", "text", "output format: text | json")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
@@ -173,9 +173,15 @@ func main() {
 	})
 
 	if *output != "" {
-		if err := writeMarkdownReport(*output, allIssues, *dir); err != nil {
-			fmt.Fprintf(os.Stderr, "report error: %v\n", err)
-			os.Exit(1)
+		var writeErr error
+		if strings.HasSuffix(strings.ToLower(*output), ".sarif") {
+			writeErr = writeSARIFReport(*output, allIssues, *dir)
+		} else {
+			writeErr = writeMarkdownReport(*output, allIssues, *dir)
+		}
+		if writeErr != nil {
+			fmt.Fprintf(os.Stderr, "report error: %v\n", writeErr)
+			os.Exit(2)
 		}
 		if len(allIssues) == 0 {
 			fmt.Printf("✓ No issues found — report written to %s\n", *output)
