@@ -22,6 +22,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"go/parser"
@@ -46,6 +47,7 @@ func main() {
 	severity := flag.String("severity", "INFO", "minimum severity to report: INFO | WARN | ERROR")
 	gitStaged := flag.Bool("git-staged", false, "only check Go files staged for the next git commit")
 	output := flag.String("output", "", "write report to a Markdown file instead of stdout (e.g. -output report.md)")
+	format := flag.String("format", "text", "output format: text | json")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
@@ -184,6 +186,14 @@ func main() {
 		return
 	}
 
+	if strings.ToLower(*format) == "json" {
+		printJSON(allIssues)
+		if len(allIssues) > 0 {
+			os.Exit(1)
+		}
+		return
+	}
+
 	if len(allIssues) == 0 {
 		switch {
 		case *file != "":
@@ -219,6 +229,18 @@ func main() {
 
 	// Exit with error code if any issues found
 	os.Exit(1)
+}
+
+func printJSON(issues []checker.Issue) {
+	if issues == nil {
+		issues = []checker.Issue{}
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(issues); err != nil {
+		fmt.Fprintf(os.Stderr, "json encode error: %v\n", err)
+		os.Exit(2)
+	}
 }
 
 func parseSeverity(s string) checker.Severity {

@@ -18,14 +18,14 @@ const (
 
 // Issue represents one performance problem found in source code.
 type Issue struct {
-	Checker    string
-	File       string
-	Line       int
-	Column     int
-	Severity   Severity
-	Message    string
-	Rule       string
-	Suggestion string
+	Checker    string   `json:"checker"`
+	File       string   `json:"file"`
+	Line       int      `json:"line"`
+	Column     int      `json:"column"`
+	Severity   Severity `json:"severity"`
+	Message    string   `json:"message"`
+	Rule       string   `json:"rule,omitempty"`
+	Suggestion string   `json:"suggestion,omitempty"`
 }
 
 // Checker is implemented by every performance rule.
