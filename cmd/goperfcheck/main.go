@@ -85,16 +85,19 @@ func main() {
 		if *skipTests && strings.HasSuffix(path, "_test.go") {
 			return
 		}
-		file, parseErr := parser.ParseFile(fset, path, nil, parser.AllErrors)
+		astFile, parseErr := parser.ParseFile(fset, path, nil, parser.AllErrors|parser.ParseComments)
 		if parseErr != nil {
 			fmt.Fprintf(os.Stderr, "parse error %s: %v\n", path, parseErr)
 			return
 		}
+		var fileIssues []checker.Issue
 		for _, c := range allCheckers {
-			for _, issue := range c.Check(fset, file) {
-				if severityLevel(issue.Severity) >= severityLevel(minSev) {
-					allIssues = append(allIssues, issue)
-				}
+			fileIssues = append(fileIssues, c.Check(fset, astFile)...)
+		}
+		fileIssues = checker.FilterSuppressed(fset, astFile, fileIssues)
+		for _, issue := range fileIssues {
+			if severityLevel(issue.Severity) >= severityLevel(minSev) {
+				allIssues = append(allIssues, issue)
 			}
 		}
 	}

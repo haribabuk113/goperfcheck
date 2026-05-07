@@ -26,6 +26,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `examples/` directory with two ready-to-compile programmatic usage examples:
   `examples/basic/` (full directory scan) and `examples/single_checker/`
 
+- Inline suppression comments: `//goperfcheck:ignore` on a line suppresses all
+  checkers; `//goperfcheck:ignore CheckerName` suppresses a specific checker;
+  `//goperfcheck:ignore A,B` suppresses multiple checkers. The comment can appear
+  on the same line as the offending code or on the `for`/`range` statement line
+  when suppressing loop-body issues
+
 ### Security
 - Fixed path traversal vulnerability in `-git-staged` mode: file paths returned
   by `git diff --name-only` that contain `..` after `filepath.Clean` are now

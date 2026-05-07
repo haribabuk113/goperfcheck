@@ -139,6 +139,25 @@ Markdown. Upload it to GitHub to get inline annotations on pull requests:
     sarif_file: results.sarif
 ```
 
+### Suppress specific findings with inline comments:
+```go
+// Suppress all checkers on this line:
+result = append(result, v) //goperfcheck:ignore
+
+// Suppress a specific checker:
+result = append(result, v) //goperfcheck:ignore MemPrealloc
+
+// Suppress multiple checkers:
+result = append(result, v) //goperfcheck:ignore MemPrealloc,StructAlign
+
+// For loop-body issues, put the comment on the for/range line:
+for _, v := range items { //goperfcheck:ignore MemPrealloc
+    result = append(result, v)
+}
+```
+Suppression is per-line. The comment must appear on the flagged line or the
+`for`/`range` statement line when the issue is inside a loop body.
+
 ### Print version:
 ```bash
 ./goperfcheck -version
