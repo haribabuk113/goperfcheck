@@ -17,7 +17,7 @@
 //
 // Usage:
 //
-//	goperfcheck [-dir <path>] [-severity INFO|WARN|ERROR] [-git-staged] [-output report.md]
+//	goperfcheck [-dir <path>] [-file <file.go>] [-severity INFO|WARN|ERROR] [-git-staged] [-output report.md]
 package main
 
 import (
@@ -39,6 +39,7 @@ const version = "0.1.0"
 
 func main() {
 	dir := flag.String("dir", ".", "root directory to scan (default: current directory)")
+	file := flag.String("file", "", "check a single Go file instead of scanning a directory")
 	skipVendor := flag.Bool("skip-vendor", true, "skip the vendor/ directory")
 	skipTests := flag.Bool("skip-tests", false, "skip *_test.go files")
 	severity := flag.String("severity", "INFO", "minimum severity to report: INFO | WARN | ERROR")
@@ -76,7 +77,18 @@ func main() {
 		}
 	}
 
-	if *gitStaged {
+	if *file != "" {
+		if !strings.HasSuffix(*file, ".go") {
+			fmt.Fprintf(os.Stderr, "error: -file must point to a .go file\n")
+			os.Exit(1)
+		}
+		abs, absErr := filepath.Abs(*file)
+		if absErr != nil {
+			fmt.Fprintf(os.Stderr, "abs error: %v\n", absErr)
+			os.Exit(1)
+		}
+		checkFile(abs)
+	} else if *gitStaged {
 		root, absErr := filepath.Abs(*dir)
 		if absErr != nil {
 			fmt.Fprintf(os.Stderr, "abs error: %v\n", absErr)
@@ -150,9 +162,12 @@ func main() {
 	}
 
 	if len(allIssues) == 0 {
-		if *gitStaged {
+		switch {
+		case *file != "":
+			fmt.Printf("✓ No performance issues found in %s\n", *file)
+		case *gitStaged:
 			fmt.Printf("✓ No performance issues found in staged files\n")
-		} else {
+		default:
 			fmt.Printf("✓ No performance issues found in %s\n", *dir)
 		}
 		return
