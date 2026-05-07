@@ -16,16 +16,25 @@ const (
 	SeverityInfo    Severity = "INFO"
 )
 
+// FixHint carries machine-readable rewrite information for the -fix flag.
+// Only a subset of issues are fixable; the rest leave Fix nil.
+type FixHint struct {
+	Kind    string `json:"kind"`          // "map_cap" | "slice_cap"
+	VarName string `json:"var,omitempty"` // slice variable to update (slice_cap only)
+	Cap     string `json:"cap"`           // capacity expression, e.g. "len(items)"
+}
+
 // Issue represents one performance problem found in source code.
 type Issue struct {
-	Checker    string   `json:"checker"`
-	File       string   `json:"file"`
-	Line       int      `json:"line"`
-	Column     int      `json:"column"`
-	Severity   Severity `json:"severity"`
-	Message    string   `json:"message"`
-	Rule       string   `json:"rule,omitempty"`
-	Suggestion string   `json:"suggestion,omitempty"`
+	Checker    string    `json:"checker"`
+	File       string    `json:"file"`
+	Line       int       `json:"line"`
+	Column     int       `json:"column"`
+	Severity   Severity  `json:"severity"`
+	Message    string    `json:"message"`
+	Rule       string    `json:"rule,omitempty"`
+	Suggestion string    `json:"suggestion,omitempty"`
+	Fix        *FixHint  `json:"fix,omitempty"`
 }
 
 // Checker is implemented by every performance rule.

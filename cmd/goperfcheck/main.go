@@ -17,7 +17,7 @@
 //
 // Usage:
 //
-//	goperfcheck [-dir <path>] [-file <file.go>] [-checker <name>] [-severity INFO|WARN|ERROR] [-git-staged] [-output report.md|report.sarif]
+//	goperfcheck [-dir <path>] [-file <file.go>] [-checker <name>] [-severity INFO|WARN|ERROR] [-git-staged] [-output report.md|report.sarif] [-fix]
 package main
 
 import (
@@ -47,6 +47,7 @@ func main() {
 	output := flag.String("output", "", "write report to a file: .md for Markdown, .sarif for SARIF 2.1.0 (GitHub Code Scanning)")
 	format := flag.String("format", "text", "output format: text | json")
 	workers := flag.Int("workers", defaultWorkers(), "number of parallel workers for file scanning")
+	fix := flag.Bool("fix", false, "auto-apply fixable suggestions in place (modifies source files)")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
@@ -165,6 +166,19 @@ func main() {
 		}
 		return allIssues[i].Line < allIssues[j].Line
 	})
+
+	if *fix {
+		n, fixErr := applyFixes(allIssues)
+		if fixErr != nil {
+			fmt.Fprintf(os.Stderr, "fix error: %v\n", fixErr)
+		}
+		if n > 0 {
+			fmt.Printf("Applied %d fix(es) — re-run without -fix to see remaining issues\n", n)
+		} else {
+			fmt.Printf("No auto-fixable issues found\n")
+		}
+		return
+	}
 
 	if *output != "" {
 		var writeErr error

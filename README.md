@@ -175,6 +175,23 @@ for _, v := range items { //goperfcheck:ignore MemPrealloc
 Suppression is per-line. The comment must appear on the flagged line or the
 `for`/`range` statement line when the issue is inside a loop body.
 
+### Auto-fix capacity hints:
+```bash
+./goperfcheck -fix
+./goperfcheck -file ./pkg/cache.go -fix
+./goperfcheck -dir ./myproject -fix -severity WARN
+```
+`-fix` rewrites source files in place to apply fixable suggestions:
+- `make(map[K]V)` → `make(map[K]V, hint)` — inserts the inferred capacity argument
+- `var x []T` immediately before a loop → `x := make([]T, 0, hint)` — replaces with
+  a preallocated slice (only when the declaration has no initializer or an explicit `nil`)
+
+After applying fixes, run the tool again without `-fix` to see any remaining issues
+that cannot be auto-fixed. The `-fix` flag is currently supported for `MemPrealloc`
+findings only; all other issue types are left unchanged.
+
+> **Caution**: `-fix` modifies source files directly. Commit or back up your work first.
+
 ### Print version:
 ```bash
 ./goperfcheck -version

@@ -96,6 +96,12 @@ func (c *MemPreallocChecker) appendIssuesInBody(fset *token.FileSet, body *ast.B
 			return true
 		}
 		f, line, col := nodePos(fset, call)
+		var fixHint *FixHint
+		if len(call.Args) >= 1 {
+			if id, ok := call.Args[0].(*ast.Ident); ok && id.Name != "_" && id.Name != "nil" {
+				fixHint = &FixHint{Kind: "slice_cap", VarName: id.Name, Cap: hint}
+			}
+		}
 		issues = append(issues, Issue{
 			Checker:  c.Name(),
 			File:     f,
@@ -108,6 +114,7 @@ func (c *MemPreallocChecker) appendIssuesInBody(fset *token.FileSet, body *ast.B
 				"Before the loop use make([]T, 0, %s); even a small hint avoids the costliest early reallocations",
 				hint,
 			),
+			Fix: fixHint,
 		})
 		return true
 	})
@@ -231,6 +238,7 @@ func (c *MemPreallocChecker) mapIssue(fset *token.FileSet, call *ast.CallExpr, h
 			"Use make(map[K]V, %s) to avoid rehashing; even a small hint prevents the first rehash",
 			hint,
 		),
+		Fix: &FixHint{Kind: "map_cap", Cap: hint},
 	}
 }
 

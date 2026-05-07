@@ -43,6 +43,13 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `//goperfcheck:ignore A,B` suppresses multiple checkers. The comment can appear
   on the same line as the offending code or on the `for`/`range` statement line
   when suppressing loop-body issues
+- `-fix` flag to auto-apply fixable suggestions in place: rewrites `make(map[K]V)`
+  → `make(map[K]V, hint)` (always safe, purely additive) and rewrites
+  `var x []T` immediately before a loop → `x := make([]T, 0, hint)` (only when the
+  declaration has no initializer or an explicit `nil`). Edits are applied
+  end-to-start within each file so byte offsets remain valid, followed by
+  `go/format` to normalise whitespace. Currently only `MemPrealloc` issues produce
+  fix hints; other checkers leave `Fix` nil and are skipped silently.
 
 ### Security
 - Fixed path traversal vulnerability in `-git-staged` mode: file paths returned
