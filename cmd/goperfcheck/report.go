@@ -24,8 +24,10 @@ var checkerCategory = map[string]string{
 	"BufferedIO":      "Buffered I/O",
 	"AtomicMutex":     "Atomic vs Mutex",
 	"LazyInit":        "Lazy Initialization",
-	"StackAlloc":      "Stack Allocation",
-	"Batching":        "Batching Operations",
+	"StackAlloc":       "Stack Allocation",
+	"Batching":         "Batching Operations",
+	"TimeNowLoop":      "time.Now() in Loops",
+	"WaitGroupMisuse":  "WaitGroup Misuse",
 }
 
 // ew is a write-error accumulator: the first Fprintf error is stored and all

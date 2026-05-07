@@ -26,6 +26,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `examples/` directory with two ready-to-compile programmatic usage examples:
   `examples/basic/` (full directory scan) and `examples/single_checker/`
 
+- `TimeNowLoop` checker (INFO): flags `time.Now()` calls inside `for`/`range` loops —
+  each call is a syscall; suggests caching the value before the loop
+- `WaitGroupMisuse` checker (ERROR): flags `wg.Add(n)` called inside a goroutine
+  literal (`go func() { wg.Add(1) }()`), which is a race condition — the counter
+  must be incremented before the `go` statement. Patterns #1 (string concat), #2
+  (regexp compile), and #5 (fmt.Sprintf concat) from the roadmap were deliberately
+  not implemented: they are already covered by `perfsprint` and `gocritic` in
+  golangci-lint
 - Parallel file scanning: the directory walk now fans out across a worker pool
   (default: `runtime.NumCPU()` goroutines). Each worker uses its own
   `token.FileSet` so there is no shared mutable state. Override with

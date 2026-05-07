@@ -15,5 +15,7 @@ func AllCheckers() []Checker {
 		&LazyInitChecker{},
 		&StackAllocChecker{},
 		&BatchingChecker{},
+		&TimeNowLoopChecker{},
+		&WaitGroupMisuseChecker{},
 	}
 }

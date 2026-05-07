@@ -37,12 +37,19 @@ The tool checks for violations across these categories:
 - **AtomicMutex**: Suggests `sync/atomic` operations for simple counters/flags (~27% faster than mutexes)
 - **ContextMisuse**: Detects `context.Context` stored in struct fields (critical error - contexts must be passed as parameters)
 
-### 3. **I/O Optimization**
+### 3. **Concurrency Correctness & Performance**
+- **TimeNowLoop**: Detects `time.Now()` called inside a loop — each call is a syscall.
+  Cache the value before the loop when the same timestamp is acceptable across iterations.
+- **WaitGroupMisuse**: Detects `wg.Add(n)` called *inside* a goroutine literal
+  (`go func() { wg.Add(1) }()`). This is a race condition: `Wait()` can return before
+  the counter is incremented. `Add` must be called before the `go` statement.
+
+### 5. **I/O Optimization**
 - **BufferedIO**: Detects unbuffered file writes in loops and missing `Flush()` calls on `bufio.Writer`
 - **ZeroCopy**: Flags unnecessary buffer copies (append([]byte{}, src...), copy in loops)
 - **Batching**: Detects individual DB/Redis/HTTP operations in loops that should be batched
 
-### 4. **Initialization & Allocation**
+### 6. **Initialization & Allocation**
 - **LazyInit**: Flags expensive init() functions and package-level allocations that could be deferred
 - **StackAlloc**: Detects `new(primitiveType)` and `&localVar` returns that force heap allocation
 - **InterfaceBoxing**: Detects `[]interface{}` and empty interface parameters that cause heap boxing
