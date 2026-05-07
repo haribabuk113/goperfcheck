@@ -127,6 +127,9 @@ func main() {
 			if name == "" || !strings.HasSuffix(name, ".go") {
 				continue
 			}
+			if strings.Contains(filepath.Clean(name), "..") {
+				continue
+			}
 			checkFile(filepath.Join(root, name))
 		}
 	} else {
