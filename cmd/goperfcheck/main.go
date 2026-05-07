@@ -17,7 +17,7 @@
 //
 // Usage:
 //
-//	goperfcheck [-dir <path>] [-file <file.go>] [-severity INFO|WARN|ERROR] [-git-staged] [-output report.md]
+//	goperfcheck [-dir <path>] [-file <file.go>] [-checker <name>] [-severity INFO|WARN|ERROR] [-git-staged] [-output report.md]
 package main
 
 import (
@@ -40,6 +40,7 @@ const version = "0.1.0"
 func main() {
 	dir := flag.String("dir", ".", "root directory to scan (default: current directory)")
 	file := flag.String("file", "", "check a single Go file instead of scanning a directory")
+	checkerName := flag.String("checker", "", "run only the named checker (e.g. mem-prealloc); use -list-checkers to see all names")
 	skipVendor := flag.Bool("skip-vendor", true, "skip the vendor/ directory")
 	skipTests := flag.Bool("skip-tests", false, "skip *_test.go files")
 	severity := flag.String("severity", "INFO", "minimum severity to report: INFO | WARN | ERROR")
@@ -56,6 +57,25 @@ func main() {
 	minSev := parseSeverity(*severity)
 
 	allCheckers := checker.AllCheckers()
+
+	if *checkerName != "" {
+		var matched []checker.Checker
+		for _, c := range allCheckers {
+			if strings.EqualFold(c.Name(), *checkerName) {
+				matched = append(matched, c)
+				break
+			}
+		}
+		if len(matched) == 0 {
+			fmt.Fprintf(os.Stderr, "unknown checker %q — valid names:\n", *checkerName)
+			for _, c := range allCheckers {
+				fmt.Fprintf(os.Stderr, "  %s\n", c.Name())
+			}
+			os.Exit(1)
+		}
+		allCheckers = matched
+	}
+
 	fset := token.NewFileSet()
 	var allIssues []checker.Issue
 
