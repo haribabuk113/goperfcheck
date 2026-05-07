@@ -54,6 +54,54 @@ The tool checks for violations across these categories:
 - **StackAlloc**: Detects `new(primitiveType)` and `&localVar` returns that force heap allocation
 - **InterfaceBoxing**: Detects `[]interface{}` and empty interface parameters that cause heap boxing
 
+## GitHub Actions
+
+Add goperfcheck to any Go repository's CI in two lines — no binary download, no Docker:
+
+```yaml
+- uses: actions/setup-go@v5          # skip if Go is already in your workflow
+  with: { go-version: stable }
+- uses: haribabuk113/goperfcheck@v1
+```
+
+Or let the action set up Go itself:
+
+```yaml
+- uses: haribabuk113/goperfcheck@v1
+  with:
+    go-version: stable
+    severity: WARN
+```
+
+### With SARIF upload for inline PR annotations
+
+```yaml
+- uses: haribabuk113/goperfcheck@v1
+  with:
+    go-version: stable
+    sarif-file: results.sarif
+  continue-on-error: true          # upload even when issues are found
+
+- uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: results.sarif
+```
+
+This writes annotations directly on the changed lines in the pull request diff.
+
+### Action inputs
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `dir` | `.` | Directory to scan |
+| `severity` | `WARN` | Minimum severity: INFO / WARN / ERROR |
+| `sarif-file` | `""` | SARIF 2.1.0 output path (for GitHub Code Scanning) |
+| `args` | `""` | Extra flags, e.g. `-skip-tests -workers 2` |
+| `version` | `latest` | goperfcheck version to install, e.g. `v0.1.0` |
+| `go-version` | `""` | Go version to install; skip if Go is already in PATH |
+
+---
+
 ## Installation
 
 **Install directly with Go (recommended):**

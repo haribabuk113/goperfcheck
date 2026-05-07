@@ -43,6 +43,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `//goperfcheck:ignore A,B` suppresses multiple checkers. The comment can appear
   on the same line as the offending code or on the `for`/`range` statement line
   when suppressing loop-body issues
+- `action.yml` — GitHub Actions marketplace integration. A composite action that
+  installs goperfcheck via `go install` and runs it. Inputs: `dir`, `severity`,
+  `sarif-file` (writes SARIF 2.1.0 for upload to GitHub Code Scanning),
+  `args` (extra flags), `version` (pin a release), `go-version` (optional
+  `actions/setup-go` bootstrap). Works on `ubuntu-latest`, `macos-latest`, and
+  `windows-latest`. Users can add goperfcheck to any CI pipeline with two lines:
+  `uses: haribabuk113/goperfcheck@v1`. Added `.github/workflows/action-test.yml`
+  to self-test the composite action on every push.
 - `-fix` flag to auto-apply fixable suggestions in place: rewrites `make(map[K]V)`
   → `make(map[K]V, hint)` (always safe, purely additive) and rewrites
   `var x []T` immediately before a loop → `x := make([]T, 0, hint)` (only when the

@@ -1,0 +1,61 @@
+name: 'goperfcheck'
+description: 'Go performance static analyzer — detects missing prealloc, context misuse, goroutine leaks, and 12+ anti-patterns from goperf.dev'
+author: 'Hari Babu Kannan'
+
+branding:
+  icon: 'zap'
+  color: 'blue'
+
+inputs:
+  dir:
+    description: 'Directory to scan (relative to the workspace root)'
+    required: false
+    default: '.'
+  severity:
+    description: 'Minimum severity to report: INFO | WARN | ERROR'
+    required: false
+    default: 'WARN'
+  sarif-file:
+    description: 'Path to write a SARIF 2.1.0 report for upload to GitHub Code Scanning. Leave empty to skip.'
+    required: false
+    default: ''
+  args:
+    description: 'Additional flags passed verbatim to goperfcheck (e.g. "-skip-tests -workers 2")'
+    required: false
+    default: ''
+  version:
+    description: 'goperfcheck version to install (e.g. "v0.1.0"). Defaults to latest.'
+    required: false
+    default: 'latest'
+  go-version:
+    description: 'Go version to set up via actions/setup-go (e.g. "stable"). Leave empty if Go is already in PATH.'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Go
+      if: inputs.go-version != ''
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ inputs.go-version }}
+
+    - name: Install goperfcheck
+      shell: bash
+      run: go install github.com/haribabuk113/goperfcheck/cmd/goperfcheck@${{ inputs.version }}
+
+    - name: Run goperfcheck
+      shell: bash
+      env:
+        GPC_DIR: ${{ inputs.dir }}
+        GPC_SEVERITY: ${{ inputs.severity }}
+        GPC_SARIF: ${{ inputs.sarif-file }}
+        GPC_ARGS: ${{ inputs.args }}
+      run: |
+        FLAGS="-dir $GPC_DIR -severity $GPC_SEVERITY"
+        if [ -n "$GPC_SARIF" ]; then
+          FLAGS="$FLAGS -output $GPC_SARIF"
+        fi
+        # shellcheck disable=SC2086  # word-splitting is intentional for FLAGS and GPC_ARGS
+        goperfcheck $FLAGS $GPC_ARGS
