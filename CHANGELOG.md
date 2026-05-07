@@ -26,6 +26,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `examples/` directory with two ready-to-compile programmatic usage examples:
   `examples/basic/` (full directory scan) and `examples/single_checker/`
 
+- Parallel file scanning: the directory walk now fans out across a worker pool
+  (default: `runtime.NumCPU()` goroutines). Each worker uses its own
+  `token.FileSet` so there is no shared mutable state. Override with
+  `-workers N` when you need to cap CPU usage in CI
 - Inline suppression comments: `//goperfcheck:ignore` on a line suppresses all
   checkers; `//goperfcheck:ignore CheckerName` suppresses a specific checker;
   `//goperfcheck:ignore A,B` suppresses multiple checkers. The comment can appear

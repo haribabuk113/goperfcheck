@@ -25,8 +25,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"go/parser"
-	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -48,6 +46,7 @@ func main() {
 	gitStaged := flag.Bool("git-staged", false, "only check Go files staged for the next git commit")
 	output := flag.String("output", "", "write report to a file: .md for Markdown, .sarif for SARIF 2.1.0 (GitHub Code Scanning)")
 	format := flag.String("format", "text", "output format: text | json")
+	workers := flag.Int("workers", defaultWorkers(), "number of parallel workers for file scanning")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
@@ -78,29 +77,8 @@ func main() {
 		allCheckers = matched
 	}
 
-	fset := token.NewFileSet()
-	var allIssues []checker.Issue
-
-	checkFile := func(path string) {
-		if *skipTests && strings.HasSuffix(path, "_test.go") {
-			return
-		}
-		astFile, parseErr := parser.ParseFile(fset, path, nil, parser.AllErrors|parser.ParseComments)
-		if parseErr != nil {
-			fmt.Fprintf(os.Stderr, "parse error %s: %v\n", path, parseErr)
-			return
-		}
-		var fileIssues []checker.Issue
-		for _, c := range allCheckers {
-			fileIssues = append(fileIssues, c.Check(fset, astFile)...)
-		}
-		fileIssues = checker.FilterSuppressed(fset, astFile, fileIssues)
-		for _, issue := range fileIssues {
-			if severityLevel(issue.Severity) >= severityLevel(minSev) {
-				allIssues = append(allIssues, issue)
-			}
-		}
-	}
+	// Collect file paths first, then scan in parallel.
+	var paths []string
 
 	if *file != "" {
 		if !strings.HasSuffix(*file, ".go") {
@@ -112,7 +90,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "abs error: %v\n", absErr)
 			os.Exit(1)
 		}
-		checkFile(abs)
+		paths = []string{abs}
 	} else if *gitStaged {
 		root, absErr := filepath.Abs(*dir)
 		if absErr != nil {
@@ -135,7 +113,7 @@ func main() {
 			if strings.Contains(filepath.Clean(name), "..") {
 				continue
 			}
-			checkFile(filepath.Join(root, name))
+			paths = append(paths, filepath.Join(root, name))
 		}
 	} else {
 		err := filepath.Walk(*dir, func(path string, info os.FileInfo, err error) error {
@@ -155,12 +133,25 @@ func main() {
 			if !strings.HasSuffix(path, ".go") {
 				return nil
 			}
-			checkFile(path)
+			paths = append(paths, path)
 			return nil
 		})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "walk error: %v\n", err)
 			os.Exit(1)
+		}
+	}
+
+	numW := *workers
+	if numW < 1 {
+		numW = 1
+	}
+	raw := scanFiles(paths, allCheckers, *skipTests, numW)
+
+	var allIssues []checker.Issue
+	for _, issue := range raw {
+		if severityLevel(issue.Severity) >= severityLevel(minSev) {
+			allIssues = append(allIssues, issue)
 		}
 	}
 

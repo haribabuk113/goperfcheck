@@ -139,6 +139,16 @@ Markdown. Upload it to GitHub to get inline annotations on pull requests:
     sarif_file: results.sarif
 ```
 
+### Control parallelism:
+```bash
+./goperfcheck                       # uses runtime.NumCPU() workers by default
+./goperfcheck -workers 4            # cap at 4 goroutines (useful in resource-constrained CI)
+./goperfcheck -workers 1            # single-threaded, deterministic output order
+```
+The directory walk fans work out to a pool of goroutines. Each worker parses
+its own files with an independent `token.FileSet`, so there is no lock contention.
+Final output is sorted by file and line regardless of completion order.
+
 ### Suppress specific findings with inline comments:
 ```go
 // Suppress all checkers on this line:
