@@ -28,7 +28,9 @@ func BenchmarkStructMisaligned(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for j := range slice {
+			slice[j].a = j%2 == 0
 			slice[j].b += int64(j)
+			slice[j].c = j%3 == 0
 			slice[j].d += int64(j)
 		}
 	}
@@ -43,6 +45,8 @@ func BenchmarkStructAligned(b *testing.B) {
 		for j := range slice {
 			slice[j].b += int64(j)
 			slice[j].d += int64(j)
+			slice[j].a = j%2 == 0
+			slice[j].c = j%3 == 0
 		}
 	}
 }

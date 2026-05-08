@@ -24,10 +24,7 @@ func BenchmarkInterfaceSlice(b *testing.B) {
 func BenchmarkTypedSlice(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		s := make([]int, 0, len(intSrc))
-		for _, v := range intSrc {
-			s = append(s, v)
-		}
+		s := append(make([]int, 0, len(intSrc)), intSrc...)
 		_ = s
 	}
 }

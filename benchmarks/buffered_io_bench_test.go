@@ -15,7 +15,11 @@ func BenchmarkUnbufferedWrite(b *testing.B) {
 	if err != nil {
 		b.Skip("cannot open /dev/null:", err)
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			b.Error(err)
+		}
+	}()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for j := 0; j < lineCount; j++ {
@@ -32,7 +36,11 @@ func BenchmarkBufferedWrite(b *testing.B) {
 	if err != nil {
 		b.Skip("cannot open /dev/null:", err)
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			b.Error(err)
+		}
+	}()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		bw := bufio.NewWriter(f)

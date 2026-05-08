@@ -18,8 +18,7 @@ func BenchmarkHeapAllocNew(b *testing.B) {
 func BenchmarkStackAllocVar(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		var x int
-		x = i
+		x := i
 		sinkVal = x // keep on stack — no pointer taken
 	}
 }

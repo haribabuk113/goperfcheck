@@ -127,8 +127,8 @@ func writeSARIFReport(path string, issues []checker.Issue, dir string) (retErr e
 		}
 
 		results = append(results, sarifResult{
-			RuleID: iss.Checker,
-			Level:  severityToSARIFLevel(iss.Severity),
+			RuleID:  iss.Checker,
+			Level:   severityToSARIFLevel(iss.Severity),
 			Message: sarifMessage{Text: text},
 			Locations: []sarifLocation{
 				{

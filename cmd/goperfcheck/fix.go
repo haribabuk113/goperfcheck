@@ -105,8 +105,14 @@ func fixFile(path string, issues []checker.Issue) (int, error) {
 
 // mapCapEdit builds an edit that inserts ", cap" before the closing paren of
 // a make(map[K]V) call at the position reported in iss.
-func mapCapEdit(fset *token.FileSet, file *ast.File, iss checker.Issue) (struct{ start, end int; text string }, bool) {
-	type edit struct{ start, end int; text string }
+func mapCapEdit(fset *token.FileSet, file *ast.File, iss checker.Issue) (struct {
+	start, end int
+	text       string
+}, bool) {
+	type edit struct {
+		start, end int
+		text       string
+	}
 	var found *ast.CallExpr
 	ast.Inspect(file, func(n ast.Node) bool {
 		if found != nil {
@@ -143,8 +149,14 @@ func mapCapEdit(fset *token.FileSet, file *ast.File, iss checker.Issue) (struct{
 // sliceCapEdit builds an edit that replaces "var x []T" immediately before the
 // enclosing loop with "x := make([]T, 0, cap)". Returns false when the pattern
 // does not match (non-var declaration, multiple vars, type not a slice, etc.).
-func sliceCapEdit(fset *token.FileSet, file *ast.File, src []byte, iss checker.Issue) (struct{ start, end int; text string }, bool) {
-	type edit struct{ start, end int; text string }
+func sliceCapEdit(fset *token.FileSet, file *ast.File, src []byte, iss checker.Issue) (struct {
+	start, end int
+	text       string
+}, bool) {
+	type edit struct {
+		start, end int
+		text       string
+	}
 
 	ctx := findEnclosingLoop(fset, file, iss.Line)
 	if ctx == nil || ctx.index == 0 {
