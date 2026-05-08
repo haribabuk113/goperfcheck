@@ -120,6 +120,7 @@ func (c *StructAlignChecker) Check(fset *token.FileSet, file *ast.File) []Issue 
 					),
 					Rule:       "Struct Field Alignment — https://goperf.dev/01-common-patterns/fields-alignment/",
 					Suggestion: "Reorder fields largest → smallest: int64/pointers first, then int32, int16, bool/byte last",
+					Benchmark:  "32B → 24B per instance (25% less memory) for a {bool,int64,bool,int64} struct — GC work scales with live heap size (Go 1.26 benchmark, see benchmarks/)",
 				})
 				break // one issue per struct
 			}

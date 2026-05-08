@@ -34,6 +34,7 @@ func (c *GoroutinePoolChecker) Check(fset *token.FileSet, file *ast.File) []Issu
 				Message:    "goroutine spawned inside a loop without a worker pool — unbounded concurrency risks saturation",
 				Rule:       "Goroutine Worker Pools — https://goperf.dev/01-common-patterns/worker-pool/",
 				Suggestion: "Create a fixed pool of N goroutines that read from a buffered job channel; set N ≈ runtime.NumCPU()",
+				Benchmark:  "202 allocs/op → 11; ~2× faster for 200 tasks with fixed worker pool vs. goroutine-per-task (Go 1.26 benchmark, see benchmarks/)",
 			})
 			return true
 		})

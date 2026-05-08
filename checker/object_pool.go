@@ -50,6 +50,7 @@ func (c *ObjectPoolChecker) Check(fset *token.FileSet, file *ast.File) []Issue {
 					Message:    pkg + "." + fn + "() called inside a loop — a new allocation is made every iteration",
 					Rule:       "Object Pooling — https://goperf.dev/01-common-patterns/object-pooling/",
 					Suggestion: "Declare a sync.Pool{New: func() any { return " + pkg + "." + fn + "(...) }}; call Get(), Reset(), use, then Put()",
+					Benchmark:  "1 alloc/op → 0; ~2× faster per operation with sync.Pool reuse (Go 1.26 benchmark, see benchmarks/)",
 				})
 			}
 			return true
@@ -83,6 +84,7 @@ func (c *ObjectPoolChecker) Check(fset *token.FileSet, file *ast.File) []Issue {
 					Message:    "make([]byte, n) inside a loop creates a new heap allocation every iteration",
 					Rule:       "Object Pooling — https://goperf.dev/01-common-patterns/object-pooling/",
 					Suggestion: "Use a sync.Pool to reuse byte slices; Get the slice, use it, then Put it back",
+					Benchmark:  "1 alloc/op → 0; ~2× faster per operation with sync.Pool reuse (Go 1.26 benchmark, see benchmarks/)",
 				})
 			}
 			return true

@@ -34,6 +34,7 @@ type Issue struct {
 	Message    string    `json:"message"`
 	Rule       string    `json:"rule,omitempty"`
 	Suggestion string    `json:"suggestion,omitempty"`
+	Benchmark  string    `json:"benchmark,omitempty"`
 	Fix        *FixHint  `json:"fix,omitempty"`
 }
 

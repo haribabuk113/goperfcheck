@@ -85,6 +85,7 @@ func (c *AtomicMutexChecker) Check(fset *token.FileSet, file *ast.File) []Issue 
 				),
 				Rule:       "Atomic Operations — https://goperf.dev/01-common-patterns/atomic-ops/",
 				Suggestion: "Replace sync.Mutex with atomic.Int64, atomic.Bool, or atomic.Uint64 (27% faster under contention)",
+				Benchmark:  "~4× faster under 8-goroutine contention: 19ns/op (atomic) vs 77ns/op (mutex) (Go 1.26 benchmark, see benchmarks/)",
 			})
 		}
 		return true
@@ -109,6 +110,7 @@ func (c *AtomicMutexChecker) Check(fset *token.FileSet, file *ast.File) []Issue 
 						Message:    "mutex protecting a single increment/decrement — use atomic.AddInt64 / AddInt32 instead",
 						Rule:       "Atomic Operations — https://goperf.dev/01-common-patterns/atomic-ops/",
 						Suggestion: "Replace with atomic.Add* (~27% faster) — no goroutine blocking",
+						Benchmark:  "~4× faster under 8-goroutine contention: 19ns/op (atomic) vs 77ns/op (mutex) (Go 1.26 benchmark, see benchmarks/)",
 					})
 				}
 			}

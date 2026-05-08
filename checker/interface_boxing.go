@@ -40,6 +40,7 @@ func (c *InterfaceBoxingChecker) Check(fset *token.FileSet, file *ast.File) []Is
 					Message:    "[]interface{} detected — each element is individually heap-boxed",
 					Rule:       "Interface Boxing — https://goperf.dev/01-common-patterns/interface-boxing/",
 					Suggestion: "Use a typed slice []ConcreteType or generics instead",
+					Benchmark:  "~2.6× slower and 2× more memory vs. typed slice at N=100 elements (Go 1.26 benchmark, see benchmarks/)",
 				})
 			}
 
@@ -64,6 +65,7 @@ func (c *InterfaceBoxingChecker) Check(fset *token.FileSet, file *ast.File) []Is
 						Message:    fmt.Sprintf("function %q parameter %q is interface{} — all arguments will be heap-boxed", node.Name.Name, pname),
 						Rule:       "Interface Boxing — https://goperf.dev/01-common-patterns/interface-boxing/",
 						Suggestion: "Use a concrete type, named interface with methods, or generics instead",
+						Benchmark:  "scalar arguments boxed into interface{} consume 2× more memory than a typed parameter (Go 1.26 benchmark, see benchmarks/)",
 					})
 				}
 			}
@@ -81,6 +83,7 @@ func (c *InterfaceBoxingChecker) Check(fset *token.FileSet, file *ast.File) []Is
 					Message:    "map[K]interface{} — all values are heap-boxed; prefer map[K]ConcreteType",
 					Rule:       "Interface Boxing — https://goperf.dev/01-common-patterns/interface-boxing/",
 					Suggestion: "Use a typed map or a struct if the key set is fixed",
+					Benchmark:  "each map value boxed as interface{} uses 2× more memory than a typed map value (Go 1.26 benchmark, see benchmarks/)",
 				})
 			}
 		}

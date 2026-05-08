@@ -50,6 +50,7 @@ func (c *ContextMisuseChecker) Check(fset *token.FileSet, file *ast.File) []Issu
 					Message:    fmt.Sprintf("context.Context stored in struct field %q — contexts must never be stored in structs", fname),
 					Rule:       "Efficient Context Management — https://goperf.dev/01-common-patterns/context/",
 					Suggestion: "Pass context.Context as the first parameter to every function that needs it",
+					Benchmark:  "correctness rule — stored context outlives the request scope, causing goroutine leaks and stale cancellation signals",
 				})
 			}
 		}

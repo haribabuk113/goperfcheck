@@ -57,6 +57,7 @@ func (c *LazyInitChecker) Check(fset *token.FileSet, file *ast.File) []Issue {
 					Message:    fmt.Sprintf("%s.%s() in init() — eager initialization slows startup even if unused", pkg, name),
 					Rule:       "Lazy Initialization — https://goperf.dev/01-common-patterns/lazy-init/",
 					Suggestion: "Wrap in sync.OnceValue(func() T { ... }) and call the getter on first use",
+					Benchmark:  "warm-path: ~6ns/op (atomic load) vs 0.4ns for eager pointer; startup allocation deferred — 0B at import time (Go 1.26 benchmark, see benchmarks/)",
 				})
 			}
 			return true
@@ -94,6 +95,7 @@ func (c *LazyInitChecker) Check(fset *token.FileSet, file *ast.File) []Issue {
 						Message:    fmt.Sprintf("package-level %s.%s() — initializes a resource at startup even if never used", pkg, name),
 						Rule:       "Lazy Initialization — https://goperf.dev/01-common-patterns/lazy-init/",
 						Suggestion: "Use sync.OnceValue / sync.OnceValues to defer initialization until first use",
+						Benchmark:  "warm-path: ~6ns/op (atomic load) vs 0.4ns for eager pointer; startup allocation deferred — 0B at import time (Go 1.26 benchmark, see benchmarks/)",
 					})
 				}
 			}

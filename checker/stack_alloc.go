@@ -60,6 +60,7 @@ func (c *StackAllocChecker) Check(fset *token.FileSet, file *ast.File) []Issue {
 				Message:    "new(" + argID.Name + ") allocates on the heap — use var x " + argID.Name + " for stack allocation",
 				Rule:       "Stack Allocations — https://goperf.dev/01-common-patterns/stack-alloc/",
 				Suggestion: "Use value semantics: var x T or x := T(0) to keep the variable on the stack",
+				Benchmark:  "1 alloc/op eliminated; ~24ns saved per call — heap new() requires GC-tracked allocation (Go 1.26 benchmark, see benchmarks/)",
 			})
 		}
 		return true
@@ -111,6 +112,7 @@ func (c *StackAllocChecker) Check(fset *token.FileSet, file *ast.File) []Issue {
 						Message:    "returning &" + id.Name + " (a local primitive) forces heap allocation — return by value instead",
 						Rule:       "Stack Allocations — https://goperf.dev/01-common-patterns/stack-alloc/",
 						Suggestion: "Return the value directly unless the caller genuinely needs a pointer",
+						Benchmark:  "1 alloc/op eliminated; ~24ns saved per call — pointer escape forces GC-tracked heap allocation (Go 1.26 benchmark, see benchmarks/)",
 					})
 				}
 			}

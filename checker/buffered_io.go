@@ -51,6 +51,7 @@ func (c *BufferedIOChecker) Check(fset *token.FileSet, file *ast.File) []Issue {
 					Message:    "." + sel.Sel.Name + "() in a loop — each call may trigger a syscall",
 					Rule:       "Efficient Buffering — https://goperf.dev/01-common-patterns/buffered-io/",
 					Suggestion: "Wrap the writer with bufio.NewWriter(w); call Flush() after the loop (or use defer)",
+					Benchmark:  "~15× faster for 200-line file write; one Flush syscall instead of 200 individual write syscalls (Go 1.26 benchmark, see benchmarks/)",
 				})
 			}
 			return true
@@ -114,6 +115,7 @@ func (c *BufferedIOChecker) Check(fset *token.FileSet, file *ast.File) []Issue {
 					Message:    "bufio.NewWriter(\"" + buf.name + "\") created but Flush() never called — buffered data will be lost",
 					Rule:       "Efficient Buffering — https://goperf.dev/01-common-patterns/buffered-io/",
 					Suggestion: "Add defer " + buf.name + ".Flush() immediately after creating the bufio.Writer",
+					Benchmark:  "correctness rule — unflushed bufio.Writer silently drops up to 4096B of buffered output on process exit",
 				})
 			}
 		}

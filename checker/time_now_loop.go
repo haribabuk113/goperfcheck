@@ -39,6 +39,7 @@ func (TimeNowLoopChecker) Check(fset *token.FileSet, file *ast.File) []Issue {
 				Message:    "time.Now() called inside a loop — each call is a syscall",
 				Rule:       "Cache time.Now() — https://goperf.dev/01-common-patterns/time/",
 				Suggestion: "Cache time.Now() in a variable before the loop if the same timestamp is acceptable across iterations",
+				Benchmark:  "~67ns/op per call; caching before N=1000 iterations cuts total loop time from ~67μs to ~0.6μs (~110× faster) (Go 1.26 benchmark, see benchmarks/)",
 			})
 			return true
 		})

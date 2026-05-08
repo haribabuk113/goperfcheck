@@ -59,6 +59,7 @@ func (WaitGroupMisuseChecker) Check(fset *token.FileSet, file *ast.File) []Issue
 				Message:    "wg.Add() called inside the goroutine — creates a race where Wait() may return before the counter is incremented",
 				Rule:       "sync.WaitGroup usage — https://goperf.dev/01-common-patterns/goroutines/",
 				Suggestion: "Call wg.Add(1) before the go statement so the counter is incremented before any Wait() can unblock",
+				Benchmark:  "correctness rule — race detector flags this; under load, Wait() unblocks before work completes, causing data loss or nil-pointer panics",
 			})
 			return true
 		})

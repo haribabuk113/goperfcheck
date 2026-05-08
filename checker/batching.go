@@ -68,6 +68,7 @@ func (c *BatchingChecker) Check(fset *token.FileSet, file *ast.File) []Issue {
 					Message:    receiverName + "." + methodName + "() called inside a loop — each call is a separate operation with overhead",
 					Rule:       "Batching Operations — https://goperf.dev/01-common-patterns/batching-ops/",
 					Suggestion: "Collect items in a slice; execute one bulk operation outside the loop (batch insert, pipeline, bulk post)",
+					Benchmark:  "~1.7× faster at call-overhead level alone (100 items, no I/O); real-world gain multiplies with network latency per call (Go 1.26 benchmark, see benchmarks/)",
 				})
 			}
 			return true

@@ -236,6 +236,9 @@ func main() {
 		if issue.Suggestion != "" {
 			fmt.Printf("   💡 %s\n", issue.Suggestion)
 		}
+		if issue.Benchmark != "" {
+			fmt.Printf("   📊 %s\n", issue.Benchmark)
+		}
 	}
 
 	fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")

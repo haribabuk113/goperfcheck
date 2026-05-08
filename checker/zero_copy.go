@@ -52,6 +52,7 @@ func (c *ZeroCopyChecker) Check(fset *token.FileSet, file *ast.File) []Issue {
 			Message:    "append([]byte{}, src...) allocates a new buffer and copies all bytes",
 			Rule:       "Zero-Copy Techniques — https://goperf.dev/01-common-patterns/zero-copy/",
 			Suggestion: "Use a slice reference (src[a:b]) for reads; copy() only when isolation is required",
+			Benchmark:  "1 alloc/op eliminated; ~2600× faster for read-only access — append copies all bytes on every call (Go 1.26 benchmark, see benchmarks/)",
 		})
 		return true
 	})
@@ -77,6 +78,7 @@ func (c *ZeroCopyChecker) Check(fset *token.FileSet, file *ast.File) []Issue {
 				Message:    "copy() inside a loop — consider reslicing (read-only) or io.CopyBuffer (reusable buf)",
 				Rule:       "Zero-Copy Techniques — https://goperf.dev/01-common-patterns/zero-copy/",
 				Suggestion: "Use io.CopyBuffer(dst, src, reusableBuf) to avoid repeated allocations",
+				Benchmark:  "1 alloc/op per iteration eliminated with reusable buffer; see benchmarks/ for zero-copy magnitude",
 			})
 			return true
 		})
@@ -103,6 +105,7 @@ func (c *ZeroCopyChecker) Check(fset *token.FileSet, file *ast.File) []Issue {
 				Message:    "io.Copy() in a loop allocates a new 32KB buffer every call",
 				Rule:       "Zero-Copy Techniques — https://goperf.dev/01-common-patterns/zero-copy/",
 				Suggestion: "Use io.CopyBuffer(dst, src, buf) with a buffer from sync.Pool",
+				Benchmark:  "32KB heap allocation per call eliminated with a pooled buffer; see benchmarks/ for zero-copy magnitude",
 			})
 			return true
 		})

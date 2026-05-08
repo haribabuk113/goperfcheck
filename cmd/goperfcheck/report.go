@@ -165,6 +165,9 @@ func writeMarkdownReport(path string, issues []checker.Issue, dir string) (retEr
 			if iss.Suggestion != "" {
 				w.printf("💡 %s\n", iss.Suggestion)
 			}
+			if iss.Benchmark != "" {
+				w.printf("📊 %s\n", iss.Benchmark)
+			}
 			w.printf("\n")
 		}
 

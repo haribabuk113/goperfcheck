@@ -2,7 +2,7 @@ BINARY  := goperfcheck
 MODULE  := github.com/haribabuk113/goperfcheck
 CMD     := ./cmd/goperfcheck
 
-.PHONY: build test lint vet fmt install clean cover
+.PHONY: build test lint vet fmt install clean cover bench
 
 build:
 	go build -o $(BINARY) $(CMD)
@@ -29,3 +29,6 @@ clean:
 cover:
 	go test -race -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out
+
+bench:
+	go test -bench=. -benchmem ./benchmarks/
