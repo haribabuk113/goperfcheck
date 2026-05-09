@@ -73,6 +73,7 @@ func main() {
 
 	_, noColorEnv := os.LookupEnv("NO_COLOR")
 	plain := *noColor || noColorEnv
+	colorEnabled := !plain && isTerminal()
 
 	symOK := "✓"
 	symFile := "📁"
@@ -101,7 +102,7 @@ func main() {
 			strings.Repeat("-", 13), strings.Repeat("-", 44))
 		for _, c := range checker.AllCheckers() {
 			meta := checker.Metadata[c.Name()]
-			fmt.Printf("%-17s %-9s %-13s %s\n", c.Name(), meta.Severity, meta.Group, meta.Description)
+			fmt.Printf("%-17s %s %-13s %s\n", c.Name(), coloredSeverityPadded(meta.Severity, 8, colorEnabled), meta.Group, meta.Description)
 		}
 		return
 	}
@@ -348,7 +349,7 @@ func main() {
 			fmt.Printf("\n%s %s  (%d issue(s))\n", symFile, rel, countPerFile[rel])
 			prevFile = rel
 		}
-		fmt.Printf("   [%s] %s:%d:%d\n", issue.Severity, issue.Checker, issue.Line, issue.Column)
+		fmt.Printf("   %s %s:%d:%d\n", coloredSeverity(issue.Severity, colorEnabled), issue.Checker, issue.Line, issue.Column)
 		fmt.Printf("   %s %s\n", symWarn, issue.Message)
 		if issue.Suggestion != "" {
 			fmt.Printf("   %s %s\n", symHint, issue.Suggestion)
@@ -370,8 +371,11 @@ func main() {
 		}
 	}
 	fmt.Printf("\n%s\n", symSep)
-	fmt.Printf("Found %d performance issue(s): %d ERROR · %d WARN · %d INFO\n",
-		len(allIssues), nErr, nWarn, nInfo)
+	fmt.Printf("Found %d performance issue(s): %s · %s · %s\n",
+		len(allIssues),
+		coloredCount(nErr, checker.SeverityError, colorEnabled),
+		coloredCount(nWarn, checker.SeverityWarning, colorEnabled),
+		coloredCount(nInfo, checker.SeverityInfo, colorEnabled))
 
 	// Exit with error code if any issues found
 	os.Exit(1)

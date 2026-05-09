@@ -285,13 +285,22 @@ Useful editor integrations:
 - **shell pipe**: `cat foo.go | goperfcheck -stdin -format json | jq '.[].message'`
 - **LSP wrapper**: pipe the buffer content before save for instant feedback
 
+### ANSI color by severity:
+When stdout is a terminal, severity labels are automatically color-coded:
+- `[ERROR]` — bold red
+- `[WARN]`  — bold yellow
+- `[INFO]`  — dim/grey
+
+Colors are suppressed automatically when output is piped or redirected, so
+`goperfcheck | grep ERROR` always produces clean text.
+
 ### CI-friendly / plain-text output:
 ```bash
 ./goperfcheck -no-color
 NO_COLOR=1 ./goperfcheck
 ```
-Disables emoji and Unicode box-drawing characters in stdout. Useful in CI log
-viewers that don't handle multi-byte Unicode (Jenkins, some GitLab runners, etc.).
+Disables emoji, Unicode box-drawing, **and** ANSI colors. Useful in CI log
+viewers that don't handle terminal control codes (Jenkins, some GitLab runners).
 Respects the [NO_COLOR](https://no-color.org) standard — set the `NO_COLOR`
 environment variable to any value for the same effect.
 

@@ -10,6 +10,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- ANSI color by severity in terminal output: `[ERROR]` is bold red, `[WARN]` is bold
+  yellow, `[INFO]` is dim/grey. Colors apply to both the per-issue severity label and
+  the footer breakdown (`3 ERROR · 8 WARN · 9 INFO`). Enabled automatically when stdout
+  is a terminal; suppressed when piped or redirected so shell pipelines stay clean.
+  Disabled entirely by `-no-color` or `NO_COLOR`. Implemented without external
+  dependencies using `os.Stdout.Stat()` for tty detection
 - `-list-checkers` flag: prints a table of every checker with its name, primary
   severity, theme group, and a one-line description of what it catches — the tool
   is now self-documenting without needing the README. Metadata lives in the exported
