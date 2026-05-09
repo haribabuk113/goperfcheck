@@ -10,6 +10,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- `-no-color` flag and `NO_COLOR` environment variable support: disables emoji and
+  Unicode box-drawing characters in stdout output, producing plain-text output
+  compatible with CI log viewers that mishandle multi-byte Unicode (Jenkins, some
+  GitLab runners, etc.). Respects the [NO_COLOR](https://no-color.org) standard —
+  setting `NO_COLOR` to any value has the same effect as passing `-no-color`
 - `-file` flag to check a single `.go` file instead of walking a directory
 - `-checker` flag to run only one named checker (case-insensitive); prints valid
   names if the given name is not recognised

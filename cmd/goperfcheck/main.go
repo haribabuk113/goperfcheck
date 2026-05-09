@@ -48,8 +48,27 @@ func main() {
 	format := flag.String("format", "text", "output format: text | json")
 	workers := flag.Int("workers", defaultWorkers(), "number of parallel workers for file scanning")
 	fix := flag.Bool("fix", false, "auto-apply fixable suggestions in place (modifies source files)")
+	noColor := flag.Bool("no-color", false, "disable emoji and Unicode box-drawing in output (also respects NO_COLOR env var)")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	_, noColorEnv := os.LookupEnv("NO_COLOR")
+	plain := *noColor || noColorEnv
+
+	symOK := "✓"
+	symFile := "📁"
+	symWarn := "⚠ "
+	symHint := "💡"
+	symBench := "📊"
+	symSep := "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	if plain {
+		symOK = "[OK]"
+		symFile = "--"
+		symWarn = "!"
+		symHint = "hint:"
+		symBench = "bench:"
+		symSep = "-------------------------------------------------"
+	}
 
 	if *showVersion {
 		fmt.Printf("goperfcheck v%s\n", version)
@@ -192,7 +211,7 @@ func main() {
 			os.Exit(2)
 		}
 		if len(allIssues) == 0 {
-			fmt.Printf("✓ No issues found — report written to %s\n", *output)
+			fmt.Printf("%s No issues found — report written to %s\n", symOK, *output)
 		} else {
 			fmt.Printf("Report written to %s (%d issue(s))\n", *output, len(allIssues))
 			os.Exit(1)
@@ -211,11 +230,11 @@ func main() {
 	if len(allIssues) == 0 {
 		switch {
 		case *file != "":
-			fmt.Printf("✓ No performance issues found in %s\n", *file)
+			fmt.Printf("%s No performance issues found in %s\n", symOK, *file)
 		case *gitStaged:
-			fmt.Printf("✓ No performance issues found in staged files\n")
+			fmt.Printf("%s No performance issues found in staged files\n", symOK)
 		default:
-			fmt.Printf("✓ No performance issues found in %s\n", *dir)
+			fmt.Printf("%s No performance issues found in %s\n", symOK, *dir)
 		}
 		return
 	}
@@ -228,20 +247,20 @@ func main() {
 			rel = issue.File
 		}
 		if rel != prevFile {
-			fmt.Printf("\n📁 %s\n", rel)
+			fmt.Printf("\n%s %s\n", symFile, rel)
 			prevFile = rel
 		}
 		fmt.Printf("   [%s] %s:%d:%d\n", issue.Severity, issue.Checker, issue.Line, issue.Column)
-		fmt.Printf("   ⚠  %s\n", issue.Message)
+		fmt.Printf("   %s %s\n", symWarn, issue.Message)
 		if issue.Suggestion != "" {
-			fmt.Printf("   💡 %s\n", issue.Suggestion)
+			fmt.Printf("   %s %s\n", symHint, issue.Suggestion)
 		}
 		if issue.Benchmark != "" {
-			fmt.Printf("   📊 %s\n", issue.Benchmark)
+			fmt.Printf("   %s %s\n", symBench, issue.Benchmark)
 		}
 	}
 
-	fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	fmt.Printf("\n%s\n", symSep)
 	fmt.Printf("Found %d performance issue(s)\n", len(allIssues))
 
 	// Exit with error code if any issues found

@@ -240,6 +240,16 @@ findings only; all other issue types are left unchanged.
 
 > **Caution**: `-fix` modifies source files directly. Commit or back up your work first.
 
+### CI-friendly / plain-text output:
+```bash
+./goperfcheck -no-color
+NO_COLOR=1 ./goperfcheck
+```
+Disables emoji and Unicode box-drawing characters in stdout. Useful in CI log
+viewers that don't handle multi-byte Unicode (Jenkins, some GitLab runners, etc.).
+Respects the [NO_COLOR](https://no-color.org) standard — set the `NO_COLOR`
+environment variable to any value for the same effect.
+
 ### Print version:
 ```bash
 ./goperfcheck -version
@@ -261,7 +271,7 @@ Issues are grouped by file and include:
 - **Message** explaining the issue
 - **Suggestion** for how to fix it
 
-Example:
+Example (default):
 ```
 📁 rma/aggregation/aggregation.go
    [WARN] StructAlign:64:2
@@ -271,6 +281,18 @@ Example:
    [ERROR] ContextMisuse:87:2
    ⚠  context.Context stored in struct field "CTX" — contexts must never be stored in structs
    💡 Pass context.Context as the first parameter to every function that needs it
+```
+
+Example (`-no-color` / `NO_COLOR`):
+```
+-- rma/aggregation/aggregation.go
+   [WARN] StructAlign:64:2
+   ! struct "AggregationsWork": field "RepairMode" (~1B) before "Emitter" (~8B) — misalignment causes padding waste
+   hint: Reorder fields largest → smallest: int64/pointers first, then int32, int16, bool/byte last
+
+   [ERROR] ContextMisuse:87:2
+   ! context.Context stored in struct field "CTX" — contexts must never be stored in structs
+   hint: Pass context.Context as the first parameter to every function that needs it
 ```
 
 ## Real-World Results
