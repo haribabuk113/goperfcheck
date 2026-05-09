@@ -301,6 +301,16 @@ func main() {
 		return
 	}
 
+	// Pre-count issues per relative path so the file header can show the total.
+	countPerFile := make(map[string]int, len(allIssues))
+	for _, issue := range allIssues {
+		rel, _ := filepath.Rel(*dir, issue.File)
+		if rel == "" {
+			rel = issue.File
+		}
+		countPerFile[rel]++
+	}
+
 	// Print results grouped by file
 	prevFile := ""
 	for _, issue := range allIssues {
@@ -309,7 +319,7 @@ func main() {
 			rel = issue.File
 		}
 		if rel != prevFile {
-			fmt.Printf("\n%s %s\n", symFile, rel)
+			fmt.Printf("\n%s %s  (%d issue(s))\n", symFile, rel, countPerFile[rel])
 			prevFile = rel
 		}
 		fmt.Printf("   [%s] %s:%d:%d\n", issue.Severity, issue.Checker, issue.Line, issue.Column)

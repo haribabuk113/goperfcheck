@@ -303,7 +303,7 @@ Issues are grouped by file and include:
 
 Example (default):
 ```
-📁 rma/aggregation/aggregation.go
+📁 rma/aggregation/aggregation.go  (2 issue(s))
    [WARN] StructAlign:64:2
    ⚠  struct "AggregationsWork": field "RepairMode" (~1B) before "Emitter" (~8B) — misalignment causes padding waste
    💡 Reorder fields largest → smallest: int64/pointers first, then int32, int16, bool/byte last
@@ -315,7 +315,7 @@ Example (default):
 
 Example (`-no-color` / `NO_COLOR`):
 ```
--- rma/aggregation/aggregation.go
+-- rma/aggregation/aggregation.go  (2 issue(s))
    [WARN] StructAlign:64:2
    ! struct "AggregationsWork": field "RepairMode" (~1B) before "Emitter" (~8B) — misalignment causes padding waste
    hint: Reorder fields largest → smallest: int64/pointers first, then int32, int16, bool/byte last

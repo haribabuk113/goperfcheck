@@ -10,6 +10,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- Per-file issue count in the text output header: each file line now shows
+  `📁 path/to/file.go  (N issue(s))` so you can see the total at a glance without
+  scrolling through all findings
 - `-group` flag to run a themed subset of checkers in one shot:
   - `memory` — MemPrealloc, ObjectPool, StructAlign, InterfaceBoxing, LazyInit, StackAlloc
   - `concurrency` — GoroutinePool, ContextMisuse, AtomicMutex, TimeNowLoop, WaitGroupMisuse
