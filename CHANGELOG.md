@@ -13,6 +13,13 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Per-file issue count in the text output header: each file line now shows
   `📁 path/to/file.go  (N issue(s))` so you can see the total at a glance without
   scrolling through all findings
+- Configuration file (`.goperfcheck`): place a `key = value` file at the repo root
+  (or any parent directory) to commit team-wide settings. Parsed before CLI flags so
+  explicit flags always take precedence. Supports all persistent settings (`severity`,
+  `skip-tests`, `skip-vendor`, `workers`, `no-color`, `group`, `checker`, `format`).
+  Inline `#` comments are stripped; unknown keys warn to stderr and are ignored.
+  Discovery walks up from the current working directory to the filesystem root, matching
+  the convention used by `.gitignore` and `.editorconfig`
 - `-group` flag to run a themed subset of checkers in one shot:
   - `memory` — MemPrealloc, ObjectPool, StructAlign, InterfaceBoxing, LazyInit, StackAlloc
   - `concurrency` — GoroutinePool, ContextMisuse, AtomicMutex, TimeNowLoop, WaitGroupMisuse

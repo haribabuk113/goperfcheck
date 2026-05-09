@@ -55,6 +55,19 @@ func main() {
 	noColor := flag.Bool("no-color", false, "disable emoji and Unicode box-drawing in output (also respects NO_COLOR env var)")
 	stdin := flag.Bool("stdin", false, "read Go source from stdin instead of a file or directory")
 	showVersion := flag.Bool("version", false, "print version and exit")
+
+	// Load .goperfcheck config before flag.Parse so CLI flags take precedence.
+	cfg, cfgPath, cfgErr := loadConfig()
+	if cfgErr != nil {
+		fmt.Fprintf(os.Stderr, "config error: %v\n", cfgErr)
+		os.Exit(2)
+	}
+	for k, v := range cfg {
+		if setErr := flag.Set(k, v); setErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: %s: unknown or invalid setting %q = %q\n", cfgPath, k, v)
+		}
+	}
+
 	flag.Parse()
 
 	_, noColorEnv := os.LookupEnv("NO_COLOR")

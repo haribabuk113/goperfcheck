@@ -290,6 +290,43 @@ environment variable to any value for the same effect.
 ./goperfcheck -help
 ```
 
+## Configuration file
+
+Create a `.goperfcheck` file in your repository root to commit team-wide settings
+once instead of repeating flags on every invocation:
+
+```ini
+# goperfcheck project configuration
+# CLI flags always override these values.
+
+# Minimum severity to report (INFO | WARN | ERROR)
+severity = WARN
+
+# Skip *_test.go files
+skip-tests = true
+
+# Run only checkers in this group (memory | concurrency | io)
+# group = memory
+
+# Number of parallel workers (default: number of CPUs)
+# workers = 4
+```
+
+**Discovery**: goperfcheck searches for `.goperfcheck` starting from the current
+working directory and walks up to the filesystem root, so running from any
+subdirectory of the repo finds the same file.
+
+**Precedence**: CLI flags always win over the config file. To override a config
+setting for one run: `goperfcheck -severity INFO` (even if config says `WARN`).
+
+**Recommended settings for config**: `severity`, `skip-tests`, `skip-vendor`,
+`workers`, `no-color`, `group`, `checker`, `format`.
+
+**Not recommended in config**: `fix` (too destructive as a default), `stdin`,
+`git-staged`, `file`, `output` (these are always ad-hoc).
+
+Unknown keys print a warning to stderr and are ignored — the run continues.
+
 ## Output Format
 
 Issues are grouped by file and include:
