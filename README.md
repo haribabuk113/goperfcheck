@@ -146,6 +146,21 @@ make build        # produces ./goperfcheck
 ./goperfcheck -file ./pkg/handler.go
 ```
 
+### Discover available checkers:
+```bash
+./goperfcheck -list-checkers
+```
+Prints a table of every checker with its name, primary severity, theme group, and
+a one-line description of what it catches:
+```
+NAME              SEVERITY  GROUP         DESCRIPTION
+-----------------  --------- ------------- --------------------------------------------
+MemPrealloc       WARN      memory        append() in loops without capacity; make(map) without size hint
+ContextMisuse     ERROR     concurrency   context.Context stored in struct fields
+BufferedIO        WARN      io            unbuffered file writes in loops; missing Flush()
+...
+```
+
 ### Run only one checker:
 ```bash
 ./goperfcheck -checker mem-prealloc

@@ -54,6 +54,7 @@ func main() {
 	fix := flag.Bool("fix", false, "auto-apply fixable suggestions in place (modifies source files)")
 	noColor := flag.Bool("no-color", false, "disable emoji and Unicode box-drawing in output (also respects NO_COLOR env var)")
 	stdin := flag.Bool("stdin", false, "read Go source from stdin instead of a file or directory")
+	listCheckers := flag.Bool("list-checkers", false, "print all checkers with severity, group, and description, then exit")
 	showVersion := flag.Bool("version", false, "print version and exit")
 
 	// Load .goperfcheck config before flag.Parse so CLI flags take precedence.
@@ -90,6 +91,18 @@ func main() {
 
 	if *showVersion {
 		fmt.Printf("goperfcheck v%s\n", version)
+		return
+	}
+
+	if *listCheckers {
+		fmt.Printf("%-17s %-9s %-13s %s\n", "NAME", "SEVERITY", "GROUP", "DESCRIPTION")
+		fmt.Printf("%s %s %s %s\n",
+			strings.Repeat("-", 17), strings.Repeat("-", 9),
+			strings.Repeat("-", 13), strings.Repeat("-", 44))
+		for _, c := range checker.AllCheckers() {
+			meta := checker.Metadata[c.Name()]
+			fmt.Printf("%-17s %-9s %-13s %s\n", c.Name(), meta.Severity, meta.Group, meta.Description)
+		}
 		return
 	}
 
