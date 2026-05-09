@@ -271,6 +271,28 @@ Markdown. Upload it to GitHub to get inline annotations on pull requests:
     sarif_file: results.sarif
 ```
 
+### Result cache (near-instant repeated runs):
+
+The tool caches parse and check results in `.goperfcheck-cache/` at the scan
+root. Each entry is keyed by `SHA-256(file content)` combined with a hash of the
+tool version and active checker set, so entries are automatically invalidated
+when a file changes or the binary is upgraded.
+
+```bash
+./goperfcheck               # first run: parses everything; populates cache
+./goperfcheck               # second run: cache hit for unchanged files — near-instant
+./goperfcheck -cache=false  # bypass cache entirely (useful in clean CI environments)
+```
+
+**What to add to `.gitignore`:**
+```
+.goperfcheck-cache/
+```
+
+The cache is safe under concurrent workers (atomic temp-file rename writes).
+Changing `-checker`, `-group`, or upgrading goperfcheck automatically busts all
+stale entries — you never need to clear it manually.
+
 ### Control parallelism:
 ```bash
 ./goperfcheck                       # uses runtime.NumCPU() workers by default
@@ -381,6 +403,9 @@ skip-tests = true
 
 # Number of parallel workers (default: number of CPUs)
 # workers = 4
+
+# Disable result cache (enabled by default)
+# cache = false
 ```
 
 **Discovery**: goperfcheck searches for `.goperfcheck` starting from the current
@@ -391,7 +416,7 @@ subdirectory of the repo finds the same file.
 setting for one run: `goperfcheck -severity INFO` (even if config says `WARN`).
 
 **Recommended settings for config**: `severity`, `skip-tests`, `skip-vendor`,
-`workers`, `no-color`, `group`, `checker`, `format`.
+`workers`, `no-color`, `group`, `checker`, `format`, `cache`.
 
 **Not recommended in config**: `fix` (too destructive as a default), `stdin`,
 `git-staged`, `file`, `output` (these are always ad-hoc).

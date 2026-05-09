@@ -10,6 +10,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- Result cache (`.goperfcheck-cache/`): parse and check results are stored in a
+  content-addressed on-disk cache keyed by `SHA-256(file content)` +
+  `SHA-256(tool version + active checker names)`. On a cache hit the file is
+  read but never re-parsed or re-checked — repeated runs on unchanged files are
+  near-instant regardless of repo size. The config hash covers the tool version
+  and the exact set of checkers being run, so changing `-checker`, `-group`, or
+  upgrading the binary automatically invalidates stale entries. Cache writes are
+  atomic (temp-file rename) and safe under concurrent workers. Add
+  `.goperfcheck-cache/` to `.gitignore` — the directory should not be committed.
+  Disable with `-cache=false` or set `cache = false` in `.goperfcheck`
+- `-cache` flag (default `true`): enable or disable the result cache. Useful for
+  one-shot CI runs where caching is not needed and the directory should stay clean
+- Fixed a pre-existing bug in the default directory walk: `filepath.Base(".")` is
+  `"."`, causing `strings.HasPrefix(".", ".")` to return true and immediately skip
+  the entire tree with `filepath.SkipDir` when `-dir .` (the default) was used.
+  The root path is now excluded from the hidden-directory filter, so
+  `goperfcheck` (no `-dir` flag) correctly scans the current directory tree
 - `-skip-generated` flag (default `true`): silently skips files carrying the
   standard `// Code generated` header during directory and `-git-staged` scans.
   Detected via the already-parsed AST — zero extra file I/O. Set

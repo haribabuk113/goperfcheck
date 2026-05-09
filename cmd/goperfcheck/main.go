@@ -55,6 +55,7 @@ func main() {
 	workers := flag.Int("workers", defaultWorkers(), "number of parallel workers for file scanning")
 	fix := flag.Bool("fix", false, "auto-apply fixable suggestions in place (modifies source files)")
 	noColor := flag.Bool("no-color", false, "disable emoji and Unicode box-drawing in output (also respects NO_COLOR env var)")
+	cache := flag.Bool("cache", true, "cache parse+check results in .goperfcheck-cache/ (keyed by file hash); near-instant re-runs on unchanged files")
 	stdin := flag.Bool("stdin", false, "read Go source from stdin instead of a file or directory")
 	listCheckers := flag.Bool("list-checkers", false, "print all checkers with severity, group, and description, then exit")
 	showVersion := flag.Bool("version", false, "print version and exit")
@@ -236,15 +237,19 @@ func main() {
 					return err
 				}
 				if info.IsDir() {
-					base := filepath.Base(path)
-					if *skipVendor && base == "vendor" {
-						return filepath.SkipDir
-					}
-					if strings.HasPrefix(base, ".") {
-						return filepath.SkipDir
-					}
-					if dirExcluded(base, excludePatterns) {
-						return filepath.SkipDir
+					// Never filter the root itself — filepath.Base(".") == "."
+					// which would incorrectly SkipDir the entire tree.
+					if path != *dir {
+						base := filepath.Base(path)
+						if *skipVendor && base == "vendor" {
+							return filepath.SkipDir
+						}
+						if strings.HasPrefix(base, ".") {
+							return filepath.SkipDir
+						}
+						if dirExcluded(base, excludePatterns) {
+							return filepath.SkipDir
+						}
 					}
 					return nil
 				}
@@ -269,7 +274,10 @@ func main() {
 		// Skip generated files for directory/git-staged scans but not for
 		// explicit -file (user intent takes precedence).
 		useSkipGenerated := *skipGenerated && *file == ""
-		raw := scanFiles(paths, allCheckers, *skipTests, useSkipGenerated, numW)
+
+		absRoot, _ := filepath.Abs(*dir)
+		cc := buildCacheConfig(*cache, filepath.Join(absRoot, cacheDirName), allCheckers)
+		raw := scanFiles(paths, allCheckers, *skipTests, useSkipGenerated, numW, cc)
 		for _, issue := range raw {
 			if severityLevel(issue.Severity) >= severityLevel(minSev) {
 				allIssues = append(allIssues, issue)
