@@ -38,7 +38,7 @@ import (
 	"github.com/haribabuk113/goperfcheck/checker"
 )
 
-const version = "0.1.0"
+const version = "0.2.0"
 
 func main() {
 	dir := flag.String("dir", ".", "root directory to scan (default: current directory)")

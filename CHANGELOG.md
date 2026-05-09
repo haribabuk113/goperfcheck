@@ -7,7 +7,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [Unreleased]
+## [0.2.0] — 2026-05-09
 
 ### Added
 - `docs/` directory: `README.md` trimmed from 528 → 137 lines and now serves
@@ -196,5 +196,5 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   - `make(map)` followed by a range loop that populates it → `make(map[K]V, len(items))`
   - Falls back to a conservative default of `8` when no size can be inferred
 
-[Unreleased]: https://github.com/haribabuk113/goperfcheck/compare/v0.1.0...HEAD
+[0.2.0]: https://github.com/haribabuk113/goperfcheck/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/haribabuk113/goperfcheck/releases/tag/v0.1.0
