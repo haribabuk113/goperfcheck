@@ -10,6 +10,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- Progress indicator on stderr: when scanning ≥ 50 files and stderr is an
+  interactive terminal, a live `Scanning... (N/Total files)` line is printed and
+  updated every 150 ms using carriage-return overwriting. The line is erased
+  before results are printed, so the final output is always clean. Suppressed
+  automatically when stderr is piped or redirected (CI logs stay clean), and not
+  shown for `-stdin` or tiny repos where scanning completes in under 150 ms
 - Result cache (`.goperfcheck-cache/`): parse and check results are stored in a
   content-addressed on-disk cache keyed by `SHA-256(file content)` +
   `SHA-256(tool version + active checker names)`. On a cache hit the file is

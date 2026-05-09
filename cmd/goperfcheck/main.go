@@ -33,6 +33,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"github.com/haribabuk113/goperfcheck/checker"
 )
@@ -277,7 +278,9 @@ func main() {
 
 		absRoot, _ := filepath.Abs(*dir)
 		cc := buildCacheConfig(*cache, filepath.Join(absRoot, cacheDirName), allCheckers)
-		raw := scanFiles(paths, allCheckers, *skipTests, useSkipGenerated, numW, cc)
+
+		var filesDone atomic.Int64
+		raw := runScanWithProgress(paths, allCheckers, *skipTests, useSkipGenerated, numW, cc, &filesDone)
 		for _, issue := range raw {
 			if severityLevel(issue.Severity) >= severityLevel(minSev) {
 				allIssues = append(allIssues, issue)

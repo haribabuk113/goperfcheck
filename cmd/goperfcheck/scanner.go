@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/haribabuk113/goperfcheck/checker"
 )
@@ -70,8 +71,10 @@ func checkFileConcurrent(path string, checkers []checker.Checker, skipGenerated 
 // scanFiles checks all paths in parallel using numWorkers goroutines.
 // skipTests skips *_test.go files; skipGenerated skips files with a
 // "// Code generated" header. Results arrive in non-deterministic order;
-// callers are expected to sort.
-func scanFiles(paths []string, checkers []checker.Checker, skipTests, skipGenerated bool, numWorkers int, cc cacheConfig) []checker.Issue {
+// callers are expected to sort. progress is incremented once per file
+// processed (including skipped files) so callers can display a progress
+// indicator; it must not be nil.
+func scanFiles(paths []string, checkers []checker.Checker, skipTests, skipGenerated bool, numWorkers int, cc cacheConfig, progress *atomic.Int64) []checker.Issue {
 	if len(paths) == 0 {
 		return nil
 	}
@@ -86,11 +89,13 @@ func scanFiles(paths []string, checkers []checker.Checker, skipTests, skipGenera
 			defer wg.Done()
 			for path := range jobs {
 				if skipTests && strings.HasSuffix(path, "_test.go") {
+					progress.Add(1)
 					continue
 				}
 				if batch := checkFileConcurrent(path, checkers, skipGenerated, cc); len(batch) > 0 {
 					results <- batch
 				}
+				progress.Add(1)
 			}
 		}()
 	}

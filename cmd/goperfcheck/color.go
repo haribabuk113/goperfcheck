@@ -24,6 +24,15 @@ func isTerminal() bool {
 	return fi.Mode()&os.ModeCharDevice != 0
 }
 
+// isStderrTerminal reports whether stderr is connected to an interactive terminal.
+func isStderrTerminal() bool {
+	fi, err := os.Stderr.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
+}
+
 // coloredSeverity returns "[SEVERITY]" wrapped with ANSI codes when color is enabled.
 func coloredSeverity(s checker.Severity, color bool) string {
 	if !color {

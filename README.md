@@ -271,6 +271,19 @@ Markdown. Upload it to GitHub to get inline annotations on pull requests:
     sarif_file: results.sarif
 ```
 
+### Progress indicator:
+
+When scanning ≥ 50 files and stderr is an interactive terminal, a live counter
+is printed on stderr and updated every 150 ms:
+
+```
+Scanning... (1240/5000 files)
+```
+
+The line is erased before results appear — output is always clean. When stderr
+is piped or redirected (CI, log files) the indicator is suppressed automatically.
+There are no flags for this; it is always on in interactive mode.
+
 ### Result cache (near-instant repeated runs):
 
 The tool caches parse and check results in `.goperfcheck-cache/` at the scan
