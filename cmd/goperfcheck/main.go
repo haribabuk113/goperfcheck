@@ -25,6 +25,9 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"go/parser"
+	"go/token"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,6 +52,7 @@ func main() {
 	workers := flag.Int("workers", defaultWorkers(), "number of parallel workers for file scanning")
 	fix := flag.Bool("fix", false, "auto-apply fixable suggestions in place (modifies source files)")
 	noColor := flag.Bool("no-color", false, "disable emoji and Unicode box-drawing in output (also respects NO_COLOR env var)")
+	stdin := flag.Bool("stdin", false, "read Go source from stdin instead of a file or directory")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
@@ -75,6 +79,19 @@ func main() {
 		return
 	}
 
+	if *stdin && *fix {
+		fmt.Fprintf(os.Stderr, "error: -stdin and -fix cannot be used together\n")
+		os.Exit(1)
+	}
+	if *stdin && *file != "" {
+		fmt.Fprintf(os.Stderr, "error: -stdin and -file cannot be used together\n")
+		os.Exit(1)
+	}
+	if *stdin && *gitStaged {
+		fmt.Fprintf(os.Stderr, "error: -stdin and -git-staged cannot be used together\n")
+		os.Exit(1)
+	}
+
 	minSev := parseSeverity(*severity)
 
 	allCheckers := checker.AllCheckers()
@@ -97,81 +114,105 @@ func main() {
 		allCheckers = matched
 	}
 
-	// Collect file paths first, then scan in parallel.
-	var paths []string
+	var allIssues []checker.Issue
 
-	if *file != "" {
-		if !strings.HasSuffix(*file, ".go") {
-			fmt.Fprintf(os.Stderr, "error: -file must point to a .go file\n")
-			os.Exit(1)
+	if *stdin {
+		src, readErr := io.ReadAll(os.Stdin)
+		if readErr != nil {
+			fmt.Fprintf(os.Stderr, "stdin read error: %v\n", readErr)
+			os.Exit(2)
 		}
-		abs, absErr := filepath.Abs(*file)
-		if absErr != nil {
-			fmt.Fprintf(os.Stderr, "abs error: %v\n", absErr)
-			os.Exit(1)
+		fset := token.NewFileSet()
+		astFile, parseErr := parser.ParseFile(fset, "<stdin>", src, parser.AllErrors|parser.ParseComments)
+		if parseErr != nil {
+			fmt.Fprintf(os.Stderr, "parse error: %v\n", parseErr)
+			os.Exit(2)
 		}
-		paths = []string{abs}
-	} else if *gitStaged {
-		root, absErr := filepath.Abs(*dir)
-		if absErr != nil {
-			fmt.Fprintf(os.Stderr, "abs error: %v\n", absErr)
-			os.Exit(1)
+		var raw []checker.Issue
+		for _, c := range allCheckers {
+			raw = append(raw, c.Check(fset, astFile)...)
 		}
-		cmd := exec.Command("git", "diff", "--name-only", "--cached", "--diff-filter=d")
-		cmd.Dir = root
-		out, cmdErr := cmd.Output()
-		if cmdErr != nil {
-			fmt.Fprintf(os.Stderr, "git error: %v\n", cmdErr)
-			os.Exit(1)
-		}
-		lines := bytes.Split(bytes.TrimSpace(out), []byte("\n"))
-		for _, line := range lines {
-			name := strings.TrimSpace(string(line))
-			if name == "" || !strings.HasSuffix(name, ".go") {
-				continue
+		raw = checker.FilterSuppressed(fset, astFile, raw)
+		for _, issue := range raw {
+			if severityLevel(issue.Severity) >= severityLevel(minSev) {
+				allIssues = append(allIssues, issue)
 			}
-			if strings.Contains(filepath.Clean(name), "..") {
-				continue
-			}
-			paths = append(paths, filepath.Join(root, name))
 		}
 	} else {
-		err := filepath.Walk(*dir, func(path string, info os.FileInfo, err error) error {
+		// Collect file paths first, then scan in parallel.
+		var paths []string
+
+		if *file != "" {
+			if !strings.HasSuffix(*file, ".go") {
+				fmt.Fprintf(os.Stderr, "error: -file must point to a .go file\n")
+				os.Exit(1)
+			}
+			abs, absErr := filepath.Abs(*file)
+			if absErr != nil {
+				fmt.Fprintf(os.Stderr, "abs error: %v\n", absErr)
+				os.Exit(1)
+			}
+			paths = []string{abs}
+		} else if *gitStaged {
+			root, absErr := filepath.Abs(*dir)
+			if absErr != nil {
+				fmt.Fprintf(os.Stderr, "abs error: %v\n", absErr)
+				os.Exit(1)
+			}
+			cmd := exec.Command("git", "diff", "--name-only", "--cached", "--diff-filter=d")
+			cmd.Dir = root
+			out, cmdErr := cmd.Output()
+			if cmdErr != nil {
+				fmt.Fprintf(os.Stderr, "git error: %v\n", cmdErr)
+				os.Exit(1)
+			}
+			lines := bytes.Split(bytes.TrimSpace(out), []byte("\n"))
+			for _, line := range lines {
+				name := strings.TrimSpace(string(line))
+				if name == "" || !strings.HasSuffix(name, ".go") {
+					continue
+				}
+				if strings.Contains(filepath.Clean(name), "..") {
+					continue
+				}
+				paths = append(paths, filepath.Join(root, name))
+			}
+		} else {
+			err := filepath.Walk(*dir, func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return err
+				}
+				if info.IsDir() {
+					base := filepath.Base(path)
+					if *skipVendor && base == "vendor" {
+						return filepath.SkipDir
+					}
+					if strings.HasPrefix(base, ".") {
+						return filepath.SkipDir
+					}
+					return nil
+				}
+				if !strings.HasSuffix(path, ".go") {
+					return nil
+				}
+				paths = append(paths, path)
+				return nil
+			})
 			if err != nil {
-				return err
+				fmt.Fprintf(os.Stderr, "walk error: %v\n", err)
+				os.Exit(1)
 			}
-			if info.IsDir() {
-				base := filepath.Base(path)
-				if *skipVendor && base == "vendor" {
-					return filepath.SkipDir
-				}
-				if strings.HasPrefix(base, ".") {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if !strings.HasSuffix(path, ".go") {
-				return nil
-			}
-			paths = append(paths, path)
-			return nil
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "walk error: %v\n", err)
-			os.Exit(1)
 		}
-	}
 
-	numW := *workers
-	if numW < 1 {
-		numW = 1
-	}
-	raw := scanFiles(paths, allCheckers, *skipTests, numW)
-
-	var allIssues []checker.Issue
-	for _, issue := range raw {
-		if severityLevel(issue.Severity) >= severityLevel(minSev) {
-			allIssues = append(allIssues, issue)
+		numW := *workers
+		if numW < 1 {
+			numW = 1
+		}
+		raw := scanFiles(paths, allCheckers, *skipTests, numW)
+		for _, issue := range raw {
+			if severityLevel(issue.Severity) >= severityLevel(minSev) {
+				allIssues = append(allIssues, issue)
+			}
 		}
 	}
 
@@ -229,6 +270,8 @@ func main() {
 
 	if len(allIssues) == 0 {
 		switch {
+		case *stdin:
+			fmt.Printf("%s No performance issues found in <stdin>\n", symOK)
 		case *file != "":
 			fmt.Printf("%s No performance issues found in %s\n", symOK, *file)
 		case *gitStaged:

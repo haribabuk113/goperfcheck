@@ -240,6 +240,21 @@ findings only; all other issue types are left unchanged.
 
 > **Caution**: `-fix` modifies source files directly. Commit or back up your work first.
 
+### Read from stdin (editor pipe integrations):
+```bash
+cat ./pkg/handler.go | goperfcheck -stdin
+goperfcheck -stdin < ./pkg/handler.go
+```
+Reads a Go source file from stdin instead of walking a directory or opening a file.
+Issues are reported with `<stdin>` as the file name. Works with `-format json`,
+`-output`, `-checker`, and `-severity`. Cannot be combined with `-file`, `-git-staged`,
+or `-fix`.
+
+Useful editor integrations:
+- **Vim**: `:!goperfcheck -stdin` (or wire to `makeprg`)
+- **shell pipe**: `cat foo.go | goperfcheck -stdin -format json | jq '.[].message'`
+- **LSP wrapper**: pipe the buffer content before save for instant feedback
+
 ### CI-friendly / plain-text output:
 ```bash
 ./goperfcheck -no-color

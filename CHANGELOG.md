@@ -10,6 +10,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- `-stdin` flag: reads a Go source file from stdin instead of walking a directory or
+  opening a named file. Issues are reported with `<stdin>` as the filename. Enables
+  editor pipe integrations (`:!goperfcheck -stdin` in Vim, `cat foo.go | goperfcheck
+  -stdin -format json` for shell pipelines). Compatible with `-format`, `-output`,
+  `-checker`, and `-severity`; mutually exclusive with `-file`, `-git-staged`, and
+  `-fix`
 - `-no-color` flag and `NO_COLOR` environment variable support: disables emoji and
   Unicode box-drawing characters in stdout output, producing plain-text output
   compatible with CI log viewers that mishandle multi-byte Unicode (Jenkins, some
