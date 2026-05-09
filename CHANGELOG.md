@@ -10,6 +10,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- Severity breakdown in the summary footer: the final line now reads
+  `Found 20 performance issue(s): 3 ERROR · 8 WARN · 9 INFO` so urgent issues
+  are visible without scrolling back through all findings
 - Per-file issue count in the text output header: each file line now shows
   `📁 path/to/file.go  (N issue(s))` so you can see the total at a glance without
   scrolling through all findings

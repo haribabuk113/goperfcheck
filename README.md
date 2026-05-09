@@ -342,6 +342,18 @@ Example (default):
 ```
 📁 rma/aggregation/aggregation.go  (2 issue(s))
    [WARN] StructAlign:64:2
+   ...
+   [ERROR] ContextMisuse:87:2
+   ...
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Found 20 performance issue(s): 1 ERROR · 8 WARN · 11 INFO
+```
+
+Full example with per-file headers:
+```
+📁 rma/aggregation/aggregation.go  (2 issue(s))
+   [WARN] StructAlign:64:2
    ⚠  struct "AggregationsWork": field "RepairMode" (~1B) before "Emitter" (~8B) — misalignment causes padding waste
    💡 Reorder fields largest → smallest: int64/pointers first, then int32, int16, bool/byte last
 

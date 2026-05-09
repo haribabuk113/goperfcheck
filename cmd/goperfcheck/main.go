@@ -345,8 +345,20 @@ func main() {
 		}
 	}
 
+	var nErr, nWarn, nInfo int
+	for _, issue := range allIssues {
+		switch issue.Severity {
+		case checker.SeverityError:
+			nErr++
+		case checker.SeverityWarning:
+			nWarn++
+		default:
+			nInfo++
+		}
+	}
 	fmt.Printf("\n%s\n", symSep)
-	fmt.Printf("Found %d performance issue(s)\n", len(allIssues))
+	fmt.Printf("Found %d performance issue(s): %d ERROR · %d WARN · %d INFO\n",
+		len(allIssues), nErr, nWarn, nInfo)
 
 	// Exit with error code if any issues found
 	os.Exit(1)
