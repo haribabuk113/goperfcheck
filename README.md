@@ -141,6 +141,34 @@ make build        # produces ./goperfcheck
 ./goperfcheck -skip-tests
 ```
 
+### Skip generated files:
+```bash
+./goperfcheck                            # default: skips files with '// Code generated' header
+./goperfcheck -skip-generated=false      # include generated files
+```
+Files carrying the standard Go `// Code generated ... DO NOT EDIT.` header are
+silently skipped by default. This eliminates an entire class of false positives
+from proto files, mock generators, stringer output, etc.
+
+Applies to directory and `-git-staged` scans. Has no effect on `-file` or
+`-stdin` — explicit inputs are always checked.
+
+### Exclude directories and file patterns:
+```bash
+./goperfcheck -exclude 'mocks/'                     # skip the mocks/ directory
+./goperfcheck -exclude '*_gen.go'                   # skip files ending in _gen.go
+./goperfcheck -exclude '*.pb.go'                    # skip protobuf generated files
+./goperfcheck -exclude 'mocks/,*_gen.go,*.pb.go'   # combine with commas
+```
+Pattern rules:
+- Patterns ending with `/` match a directory name — the directory and all its
+  contents are skipped during the walk (efficient, no entries traversed)
+- All other patterns are matched against the file's base name using
+  `filepath.Match` (standard Go glob: `*`, `?`, `[range]`)
+
+Exclusion applies to directory and `-git-staged` scans; explicit `-file` and
+`-stdin` inputs are always checked.
+
 ### Check a single file:
 ```bash
 ./goperfcheck -file ./pkg/handler.go

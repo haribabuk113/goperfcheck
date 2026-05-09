@@ -22,11 +22,16 @@ func defaultWorkers() int {
 
 // checkFileConcurrent parses and checks a single file. It creates its own
 // token.FileSet so it is safe to call from multiple goroutines simultaneously.
-func checkFileConcurrent(path string, checkers []checker.Checker) []checker.Issue {
+// When skipGenerated is true, files carrying a "// Code generated" header are
+// silently skipped.
+func checkFileConcurrent(path string, checkers []checker.Checker, skipGenerated bool) []checker.Issue {
 	fset := token.NewFileSet()
 	astFile, err := parser.ParseFile(fset, path, nil, parser.AllErrors|parser.ParseComments)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse error %s: %v\n", path, err)
+		return nil
+	}
+	if skipGenerated && isGeneratedFile(astFile) {
 		return nil
 	}
 	var issues []checker.Issue
@@ -37,9 +42,10 @@ func checkFileConcurrent(path string, checkers []checker.Checker) []checker.Issu
 }
 
 // scanFiles checks all paths in parallel using numWorkers goroutines.
-// skipTests skips *_test.go files when true.
-// Results arrive in non-deterministic order; callers are expected to sort.
-func scanFiles(paths []string, checkers []checker.Checker, skipTests bool, numWorkers int) []checker.Issue {
+// skipTests skips *_test.go files; skipGenerated skips files with a
+// "// Code generated" header. Results arrive in non-deterministic order;
+// callers are expected to sort.
+func scanFiles(paths []string, checkers []checker.Checker, skipTests, skipGenerated bool, numWorkers int) []checker.Issue {
 	if len(paths) == 0 {
 		return nil
 	}
@@ -56,7 +62,7 @@ func scanFiles(paths []string, checkers []checker.Checker, skipTests bool, numWo
 				if skipTests && strings.HasSuffix(path, "_test.go") {
 					continue
 				}
-				if batch := checkFileConcurrent(path, checkers); len(batch) > 0 {
+				if batch := checkFileConcurrent(path, checkers, skipGenerated); len(batch) > 0 {
 					results <- batch
 				}
 			}

@@ -10,6 +10,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- `-skip-generated` flag (default `true`): silently skips files carrying the
+  standard `// Code generated` header during directory and `-git-staged` scans.
+  Detected via the already-parsed AST — zero extra file I/O. Set
+  `-skip-generated=false` to include generated files. Has no effect on explicit
+  `-file` or `-stdin` inputs (user intent takes precedence)
+- `-exclude` flag: comma-separated exclusion patterns applied before scanning.
+  Patterns ending with `/` skip entire directories during the walk (e.g. `mocks/`,
+  `testdata/`); other patterns are matched against the file's base name using
+  `filepath.Match` (e.g. `*_gen.go`, `*.pb.go`). Multiple patterns:
+  `-exclude 'mocks/,*_gen.go,*.pb.go'`. Applies to directory and `-git-staged`
+  scans; explicit `-file` and `-stdin` are always checked
 - ANSI color by severity in terminal output: `[ERROR]` is bold red, `[WARN]` is bold
   yellow, `[INFO]` is dim/grey. Colors apply to both the per-issue severity label and
   the footer breakdown (`3 ERROR · 8 WARN · 9 INFO`). Enabled automatically when stdout

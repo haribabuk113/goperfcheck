@@ -46,6 +46,8 @@ func main() {
 	group := flag.String("group", "", "run only checkers in a theme group: memory | concurrency | io")
 	skipVendor := flag.Bool("skip-vendor", true, "skip the vendor/ directory")
 	skipTests := flag.Bool("skip-tests", false, "skip *_test.go files")
+	skipGenerated := flag.Bool("skip-generated", true, "skip files containing a '// Code generated' header")
+	exclude := flag.String("exclude", "", "comma-separated list of exclusion patterns: directory names end with / (e.g. mocks/), file globs do not (e.g. *_gen.go,*.pb.go)")
 	severity := flag.String("severity", "INFO", "minimum severity to report: INFO | WARN | ERROR")
 	gitStaged := flag.Bool("git-staged", false, "only check Go files staged for the next git commit")
 	output := flag.String("output", "", "write report to a file: .md for Markdown, .sarif for SARIF 2.1.0 (GitHub Code Scanning)")
@@ -160,6 +162,8 @@ func main() {
 		allCheckers = matched
 	}
 
+	excludePatterns := parseExcludePatterns(*exclude)
+
 	var allIssues []checker.Issue
 
 	if *stdin {
@@ -221,7 +225,10 @@ func main() {
 				if strings.Contains(filepath.Clean(name), "..") {
 					continue
 				}
-				paths = append(paths, filepath.Join(root, name))
+				p := filepath.Join(root, name)
+				if !fileExcluded(p, excludePatterns) {
+					paths = append(paths, p)
+				}
 			}
 		} else {
 			err := filepath.Walk(*dir, func(path string, info os.FileInfo, err error) error {
@@ -236,12 +243,17 @@ func main() {
 					if strings.HasPrefix(base, ".") {
 						return filepath.SkipDir
 					}
+					if dirExcluded(base, excludePatterns) {
+						return filepath.SkipDir
+					}
 					return nil
 				}
 				if !strings.HasSuffix(path, ".go") {
 					return nil
 				}
-				paths = append(paths, path)
+				if !fileExcluded(path, excludePatterns) {
+					paths = append(paths, path)
+				}
 				return nil
 			})
 			if err != nil {
@@ -254,7 +266,10 @@ func main() {
 		if numW < 1 {
 			numW = 1
 		}
-		raw := scanFiles(paths, allCheckers, *skipTests, numW)
+		// Skip generated files for directory/git-staged scans but not for
+		// explicit -file (user intent takes precedence).
+		useSkipGenerated := *skipGenerated && *file == ""
+		raw := scanFiles(paths, allCheckers, *skipTests, useSkipGenerated, numW)
 		for _, issue := range raw {
 			if severityLevel(issue.Severity) >= severityLevel(minSev) {
 				allIssues = append(allIssues, issue)
