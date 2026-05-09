@@ -13,7 +13,7 @@ A static analysis tool that checks Go code against all performance best practice
 
 ## Overview
 
-`goperfcheck` scans Go source files and reports violations of 12+ performance optimization patterns covered in the goperf.dev guide. It runs without external dependencies (only uses Go's standard library AST/parser).
+`goperfcheck` scans Go source files and reports violations of 18 performance optimization patterns covered in the goperf.dev guide. It runs without external dependencies (only uses Go's standard library AST/parser).
 
 ## Features
 
@@ -43,16 +43,35 @@ The tool checks for violations across these categories:
 - **WaitGroupMisuse**: Detects `wg.Add(n)` called *inside* a goroutine literal
   (`go func() { wg.Add(1) }()`). This is a race condition: `Wait()` can return before
   the counter is incremented. `Add` must be called before the `go` statement.
+- **DeferInLoop**: Detects `defer` statements inside `for`/`range` loops. Each deferred
+  call allocates a closure per iteration, and the cleanup fires at function return —
+  not at the end of each loop iteration — which is a common correctness bug (e.g.,
+  `defer f.Close()` in a loop that opens multiple files closes them all only when the
+  surrounding function returns). Suggests wrapping the loop body in an immediately-invoked
+  function literal or tracking resources in a slice.
 
 ### 5. **I/O Optimization**
 - **BufferedIO**: Detects unbuffered file writes in loops and missing `Flush()` calls on `bufio.Writer`
 - **ZeroCopy**: Flags unnecessary buffer copies (append([]byte{}, src...), copy in loops)
 - **Batching**: Detects individual DB/Redis/HTTP operations in loops that should be batched
+- **HTTPClientReuse**: Detects `http.Client{...}` composite literals created inside function
+  bodies. Each client has its own `Transport` with a fresh connection pool; creating a new
+  client per request abandons idle TCP/TLS connections and forces a new handshake every time
+  (~3 ms vs ~200 µs for a reused connection — ~15×). Suggests a shared package-level
+  `var client = &http.Client{Timeout: 30*time.Second}`.
 
 ### 6. **Initialization & Allocation**
 - **LazyInit**: Flags expensive init() functions and package-level allocations that could be deferred
 - **StackAlloc**: Detects `new(primitiveType)` and `&localVar` returns that force heap allocation
 - **InterfaceBoxing**: Detects `[]interface{}` and empty interface parameters that cause heap boxing
+- **RegexpCompile**: Detects `regexp.Compile`, `regexp.MustCompile`, `regexp.CompilePOSIX`, and
+  `regexp.MustCompilePOSIX` calls inside function bodies. Pattern compilation takes ~microseconds
+  and allocates; calling it on every function invocation is wasteful. Suggests a package-level
+  `var re = regexp.MustCompile(...)` (~6× faster for repeated matches).
+- **StringConcatLoop**: Detects `s += expr` and `s = s + expr` inside `for`/`range` loops.
+  String concatenation in a loop is O(n²) in allocations — each iteration allocates a new
+  string and copies all previous bytes. Suggests `strings.Builder` with an upfront `Grow` call
+  (~100× faster for 1000 iterations).
 
 ## GitHub Actions
 
@@ -198,9 +217,9 @@ Pass an unknown name and the tool prints all valid checker names.
 
 ### Run a group of related checkers:
 ```bash
-./goperfcheck -group memory        # MemPrealloc, ObjectPool, StructAlign, InterfaceBoxing, LazyInit, StackAlloc
-./goperfcheck -group concurrency   # GoroutinePool, ContextMisuse, AtomicMutex, TimeNowLoop, WaitGroupMisuse
-./goperfcheck -group io            # ZeroCopy, BufferedIO, Batching
+./goperfcheck -group memory        # MemPrealloc, ObjectPool, StructAlign, InterfaceBoxing, LazyInit, StackAlloc, StringConcatLoop, RegexpCompile
+./goperfcheck -group concurrency   # GoroutinePool, ContextMisuse, AtomicMutex, TimeNowLoop, WaitGroupMisuse, DeferInLoop
+./goperfcheck -group io            # ZeroCopy, BufferedIO, Batching, HTTPClientReuse
 ```
 Lower friction than naming individual checkers. Combine with other flags:
 ```bash

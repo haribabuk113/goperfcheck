@@ -80,6 +80,32 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `examples/` directory with two ready-to-compile programmatic usage examples:
   `examples/basic/` (full directory scan) and `examples/single_checker/`
 
+- `DeferInLoop` checker (WARN): flags `defer` statements inside `for`/`range` loops.
+  Each iteration allocates a closure on the heap and the defer fires at function
+  return (not loop iteration end), which delays resource cleanup and is a common
+  correctness bug. Suggests wrapping the loop body in an immediately-invoked
+  function literal (`func() { defer f.Close(); ... }()`) or tracking resources
+  in a slice and cleaning up after the loop. FuncLit boundaries reset the loop
+  context so defer inside a goroutine closure is not flagged
+- `StringConcatLoop` checker (WARN): flags `s += expr` and `s = s + expr` inside
+  `for`/`range` loops. String concatenation in a loop is O(n²) in allocations —
+  each iteration allocates a new string and copies all previous bytes. Suggests
+  `strings.Builder` with an upfront `Grow` call, which is O(n) with a single
+  allocation. Detects both `+=` tokens and explicit `s = s + x` binary expressions
+  where the LHS variable appears on either side of the `+`
+- `RegexpCompile` checker (WARN): flags `regexp.Compile`, `regexp.MustCompile`,
+  `regexp.CompilePOSIX`, and `regexp.MustCompilePOSIX` calls inside function bodies
+  (including function literals). Pattern compilation takes ~microseconds and allocates;
+  repeating it on every call is wasteful. Suggests a package-level
+  `var re = regexp.MustCompile(...)` so the pattern is compiled once at program start.
+  Correctly ignores package-level `var` and `init()` declarations
+- `HTTPClientReuse` checker (WARN): flags `http.Client{...}` composite literals
+  inside function bodies. Each `http.Client` has its own `Transport` with a fresh
+  connection pool; creating a new client per request discards idle TCP/TLS connections
+  and forces a new handshake every time (~3 ms vs ~200 µs for a reused connection).
+  Suggests a shared package-level `var client = &http.Client{...}`. Only flags the
+  composite literal, not variable references, so function parameters/return values are
+  not affected
 - `TimeNowLoop` checker (INFO): flags `time.Now()` calls inside `for`/`range` loops —
   each call is a syscall; suggests caching the value before the loop
 - `WaitGroupMisuse` checker (ERROR): flags `wg.Add(n)` called inside a goroutine

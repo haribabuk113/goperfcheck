@@ -8,9 +8,9 @@ import (
 // Groups maps each theme name to the checker names it contains.
 // Names are lower-cased keys; checker names match Checker.Name() exactly.
 var Groups = map[string][]string{
-	"memory":      {"MemPrealloc", "ObjectPool", "StructAlign", "InterfaceBoxing", "LazyInit", "StackAlloc"},
-	"concurrency": {"GoroutinePool", "ContextMisuse", "AtomicMutex", "TimeNowLoop", "WaitGroupMisuse"},
-	"io":          {"ZeroCopy", "BufferedIO", "Batching"},
+	"memory":      {"MemPrealloc", "ObjectPool", "StructAlign", "InterfaceBoxing", "LazyInit", "StackAlloc", "StringConcatLoop", "RegexpCompile"},
+	"concurrency": {"GoroutinePool", "ContextMisuse", "AtomicMutex", "TimeNowLoop", "WaitGroupMisuse", "DeferInLoop"},
+	"io":          {"ZeroCopy", "BufferedIO", "Batching", "HTTPClientReuse"},
 }
 
 // SortedGroupNames returns the group names in sorted order.

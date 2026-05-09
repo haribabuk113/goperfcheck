@@ -23,4 +23,8 @@ var Metadata = map[string]CheckerMeta{
 	"Batching":        {"WARN", "io", "individual DB/Redis/HTTP calls in loops"},
 	"TimeNowLoop":     {"INFO", "concurrency", "time.Now() inside loops — each call is a syscall"},
 	"WaitGroupMisuse": {"ERROR", "concurrency", "wg.Add() called inside goroutine literals — race condition"},
+	"DeferInLoop":     {"WARN", "concurrency", "defer inside a loop allocates a closure per iter and fires at function return"},
+	"StringConcatLoop": {"WARN", "memory", "string += in a loop causes O(n²) allocations — use strings.Builder"},
+	"RegexpCompile":   {"WARN", "memory", "regexp.Compile/MustCompile inside a function — compile once at package level"},
+	"HTTPClientReuse": {"WARN", "io", "http.Client{} created per call — share a package-level client for connection reuse"},
 }

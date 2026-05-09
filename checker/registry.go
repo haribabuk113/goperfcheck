@@ -17,5 +17,9 @@ func AllCheckers() []Checker {
 		&BatchingChecker{},
 		&TimeNowLoopChecker{},
 		&WaitGroupMisuseChecker{},
+		&DeferInLoopChecker{},
+		&StringConcatLoopChecker{},
+		&RegexpCompileChecker{},
+		&HTTPClientReuseChecker{},
 	}
 }
