@@ -10,6 +10,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- `docs/` directory: `README.md` trimmed from 528 → 137 lines and now serves
+  as a quick-start page. Full content moved to `docs/checkers.md` (per-checker
+  detail, capacity hint inference, groups, limitations) and `docs/usage.md`
+  (all flags, output formats, config file, suppression, cache, SARIF).
+  `CONTRIBUTING.md` updated to point contributors at the right files
 - Progress indicator on stderr: when scanning ≥ 50 files and stderr is an
   interactive terminal, a live `Scanning... (N/Total files)` line is printed and
   updated every 150 ms using carriage-return overwriting. The line is erased

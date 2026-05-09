@@ -43,7 +43,11 @@ func loadConfig() (cfg map[string]string, path string, err error) {
 	if openErr != nil {
 		return nil, path, openErr
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 
 	cfg = make(map[string]string)
 	scanner := bufio.NewScanner(f)

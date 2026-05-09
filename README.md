@@ -9,520 +9,129 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/haribabuk113/goperfcheck)](https://goreportcard.com/report/github.com/haribabuk113/goperfcheck)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A static analysis tool that checks Go code against all performance best practices from **https://goperf.dev**.
+A zero-dependency static analysis tool that checks Go code against the 18 performance best practices from **[goperf.dev](https://goperf.dev)**.
 
-## Overview
+---
 
-`goperfcheck` scans Go source files and reports violations of 18 performance optimization patterns covered in the goperf.dev guide. It runs without external dependencies (only uses Go's standard library AST/parser).
+## Install
 
-## Features
+```bash
+go install github.com/haribabuk113/goperfcheck/cmd/goperfcheck@latest
+```
 
-The tool checks for violations across these categories:
+Or build from source:
+```bash
+git clone https://github.com/haribabuk113/goperfcheck.git
+cd goperfcheck && make build
+```
 
-### 1. **Memory Management**
-- **MemPrealloc**: Detects `append()` in loops without preallocated capacity and `make(map)` calls without size hints.
-  The checker infers the best capacity hint directly from the surrounding code:
-  - `for _, v := range items` → suggests `make([]T, 0, len(items))`
-  - `for i := 0; i < n; i++` → suggests `make([]T, 0, n)`
-  - `for i := 0; i <= n; i++` → suggests `make([]T, 0, n+1)`
-  - `m := make(map[K]V)` followed by `for _, v := range items { m[...] = ... }` → suggests `make(map[K]V, len(items))`
-  - When no size can be inferred, it falls back to a conservative default of **8**
+---
 
-  **Why default 8 beats no hint**: Omitting a capacity causes the runtime to copy the backing array ≈log₂(finalLen) times as it doubles. Preallocating 8 slots eliminates the first three doublings (cap 0→1→2→4→8) — the most expensive ones relative to the work done. For maps, Go rehashes at a load-factor of ~6.5/8, so even `make(map[K]V, 8)` avoids the first rehash entirely. The memory cost (8×sizeof(element)) is negligible because those bytes would be allocated anyway once the data structure grows.
-- **ObjectPool**: Flags high-churn allocations (bytes.Buffer, bufio.Writer, etc.) in loops that could use `sync.Pool`
-- **StructAlign**: Detects misaligned struct fields (small before large) that waste padding memory
+## Quick start
 
-### 2. **Concurrency & Synchronization**
-- **GoroutinePool**: Flags unbounded goroutine creation in loops (should use worker pools)
-- **AtomicMutex**: Suggests `sync/atomic` operations for simple counters/flags (~27% faster than mutexes)
-- **ContextMisuse**: Detects `context.Context` stored in struct fields (critical error - contexts must be passed as parameters)
+```bash
+goperfcheck                         # scan current directory
+goperfcheck -severity WARN          # warnings and errors only
+goperfcheck -group memory           # run the memory checker group
+goperfcheck -git-staged             # check only staged files (pre-commit)
+goperfcheck -list-checkers          # show all 18 checkers
+goperfcheck -help                   # all flags
+```
 
-### 3. **Concurrency Correctness & Performance**
-- **TimeNowLoop**: Detects `time.Now()` called inside a loop — each call is a syscall.
-  Cache the value before the loop when the same timestamp is acceptable across iterations.
-- **WaitGroupMisuse**: Detects `wg.Add(n)` called *inside* a goroutine literal
-  (`go func() { wg.Add(1) }()`). This is a race condition: `Wait()` can return before
-  the counter is incremented. `Add` must be called before the `go` statement.
-- **DeferInLoop**: Detects `defer` statements inside `for`/`range` loops. Each deferred
-  call allocates a closure per iteration, and the cleanup fires at function return —
-  not at the end of each loop iteration — which is a common correctness bug (e.g.,
-  `defer f.Close()` in a loop that opens multiple files closes them all only when the
-  surrounding function returns). Suggests wrapping the loop body in an immediately-invoked
-  function literal or tracking resources in a slice.
+Output:
+```
+📁 pkg/handler.go  (2 issue(s))
+   [WARN] MemPrealloc:42:10
+   ⚠  append() inside a loop — repeated reallocations occur when the backing array runs out of capacity
+   💡 Before the loop use make([]T, 0, len(items))
+   📊 12 allocs/op → 0; ~10× faster at N=1000
 
-### 5. **I/O Optimization**
-- **BufferedIO**: Detects unbuffered file writes in loops and missing `Flush()` calls on `bufio.Writer`
-- **ZeroCopy**: Flags unnecessary buffer copies (append([]byte{}, src...), copy in loops)
-- **Batching**: Detects individual DB/Redis/HTTP operations in loops that should be batched
-- **HTTPClientReuse**: Detects `http.Client{...}` composite literals created inside function
-  bodies. Each client has its own `Transport` with a fresh connection pool; creating a new
-  client per request abandons idle TCP/TLS connections and forces a new handshake every time
-  (~3 ms vs ~200 µs for a reused connection — ~15×). Suggests a shared package-level
-  `var client = &http.Client{Timeout: 30*time.Second}`.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Found 12 performance issue(s): 1 ERROR · 7 WARN · 4 INFO
+```
 
-### 6. **Initialization & Allocation**
-- **LazyInit**: Flags expensive init() functions and package-level allocations that could be deferred
-- **StackAlloc**: Detects `new(primitiveType)` and `&localVar` returns that force heap allocation
-- **InterfaceBoxing**: Detects `[]interface{}` and empty interface parameters that cause heap boxing
-- **RegexpCompile**: Detects `regexp.Compile`, `regexp.MustCompile`, `regexp.CompilePOSIX`, and
-  `regexp.MustCompilePOSIX` calls inside function bodies. Pattern compilation takes ~microseconds
-  and allocates; calling it on every function invocation is wasteful. Suggests a package-level
-  `var re = regexp.MustCompile(...)` (~6× faster for repeated matches).
-- **StringConcatLoop**: Detects `s += expr` and `s = s + expr` inside `for`/`range` loops.
-  String concatenation in a loop is O(n²) in allocations — each iteration allocates a new
-  string and copies all previous bytes. Suggests `strings.Builder` with an upfront `Grow` call
-  (~100× faster for 1000 iterations).
+---
+
+## What it checks
+
+| Checker | Sev | Group | What it catches |
+|---------|-----|-------|-----------------|
+| MemPrealloc | WARN | memory | `append()` in loops without capacity; `make(map)` without size hint |
+| ObjectPool | WARN | memory | High-churn allocations in loops — use `sync.Pool` |
+| StructAlign | WARN | memory | Struct fields ordered small→large, wasting padding |
+| InterfaceBoxing | INFO | memory | `[]interface{}` params causing heap boxing |
+| LazyInit | INFO | memory | Expensive `init()` / package-level allocations |
+| StackAlloc | INFO | memory | `new(T)` on primitives forcing heap allocation |
+| StringConcatLoop | WARN | memory | `s +=` in a loop — O(n²) copies; use `strings.Builder` |
+| RegexpCompile | WARN | memory | `regexp.MustCompile` inside a function — compile once at package level |
+| GoroutinePool | WARN | concurrency | Unbounded goroutine creation in loops |
+| ContextMisuse | ERROR | concurrency | `context.Context` stored in struct fields |
+| AtomicMutex | INFO | concurrency | Simple counters using mutexes — prefer `sync/atomic` |
+| TimeNowLoop | INFO | concurrency | `time.Now()` inside a loop — each call is a syscall |
+| WaitGroupMisuse | ERROR | concurrency | `wg.Add()` inside a goroutine literal — race condition |
+| DeferInLoop | WARN | concurrency | `defer` in a loop fires at function return, not iteration end |
+| ZeroCopy | INFO | io | `append([]byte{}, src...)` — unnecessary buffer copy |
+| BufferedIO | WARN | io | Unbuffered writes in loops; missing `Flush()` |
+| Batching | WARN | io | Individual DB/Redis/HTTP calls in loops |
+| HTTPClientReuse | WARN | io | `http.Client{}` per request — abandons connection pool |
+
+→ **[Full checker reference with examples and benchmarks](docs/checkers.md)**
+
+---
 
 ## GitHub Actions
 
-Add goperfcheck to any Go repository's CI in two lines — no binary download, no Docker:
+Add to any Go repository's CI in two lines — no binary download, no Docker:
 
 ```yaml
-- uses: actions/setup-go@v5          # skip if Go is already in your workflow
+- uses: actions/setup-go@v5
   with: { go-version: stable }
 - uses: haribabuk113/goperfcheck@v1
 ```
 
-Or let the action set up Go itself:
-
-```yaml
-- uses: haribabuk113/goperfcheck@v1
-  with:
-    go-version: stable
-    severity: WARN
-```
-
-### With SARIF upload for inline PR annotations
+With SARIF upload for inline PR annotations:
 
 ```yaml
 - uses: haribabuk113/goperfcheck@v1
   with:
     go-version: stable
     sarif-file: results.sarif
-  continue-on-error: true          # upload even when issues are found
+  continue-on-error: true
 
 - uses: github/codeql-action/upload-sarif@v3
   with:
     sarif_file: results.sarif
 ```
 
-This writes annotations directly on the changed lines in the pull request diff.
-
-### Action inputs
-
 | Input | Default | Description |
 |-------|---------|-------------|
 | `dir` | `.` | Directory to scan |
-| `severity` | `WARN` | Minimum severity: INFO / WARN / ERROR |
-| `sarif-file` | `""` | SARIF 2.1.0 output path (for GitHub Code Scanning) |
+| `severity` | `WARN` | Minimum severity: `INFO` / `WARN` / `ERROR` |
+| `sarif-file` | `""` | SARIF 2.1.0 output path |
 | `args` | `""` | Extra flags, e.g. `-skip-tests -workers 2` |
-| `version` | `latest` | goperfcheck version to install, e.g. `v0.1.0` |
+| `version` | `latest` | goperfcheck version to install |
 | `go-version` | `""` | Go version to install; skip if Go is already in PATH |
 
 ---
 
-## Installation
+## Documentation
 
-**Install directly with Go (recommended):**
-```bash
-go install github.com/haribabuk113/goperfcheck/cmd/goperfcheck@latest
-```
-
-**Build from source:**
-```bash
-git clone https://github.com/haribabuk113/goperfcheck.git
-cd goperfcheck
-make build        # produces ./goperfcheck
-# or: go build -o goperfcheck ./cmd/goperfcheck
-```
-
-## Usage
-
-### Basic scan of current directory:
-```bash
-./goperfcheck
-```
-
-### Scan a specific directory:
-```bash
-./goperfcheck -dir ./rma
-./goperfcheck -dir /path/to/code
-```
-
-### Filter by severity (INFO, WARN, ERROR):
-```bash
-./goperfcheck -severity WARN        # Show warnings and errors only
-./goperfcheck -severity ERROR       # Show critical errors only
-```
-
-### Skip tests:
-```bash
-./goperfcheck -skip-tests
-```
-
-### Skip generated files:
-```bash
-./goperfcheck                            # default: skips files with '// Code generated' header
-./goperfcheck -skip-generated=false      # include generated files
-```
-Files carrying the standard Go `// Code generated ... DO NOT EDIT.` header are
-silently skipped by default. This eliminates an entire class of false positives
-from proto files, mock generators, stringer output, etc.
-
-Applies to directory and `-git-staged` scans. Has no effect on `-file` or
-`-stdin` — explicit inputs are always checked.
-
-### Exclude directories and file patterns:
-```bash
-./goperfcheck -exclude 'mocks/'                     # skip the mocks/ directory
-./goperfcheck -exclude '*_gen.go'                   # skip files ending in _gen.go
-./goperfcheck -exclude '*.pb.go'                    # skip protobuf generated files
-./goperfcheck -exclude 'mocks/,*_gen.go,*.pb.go'   # combine with commas
-```
-Pattern rules:
-- Patterns ending with `/` match a directory name — the directory and all its
-  contents are skipped during the walk (efficient, no entries traversed)
-- All other patterns are matched against the file's base name using
-  `filepath.Match` (standard Go glob: `*`, `?`, `[range]`)
-
-Exclusion applies to directory and `-git-staged` scans; explicit `-file` and
-`-stdin` inputs are always checked.
-
-### Check a single file:
-```bash
-./goperfcheck -file ./pkg/handler.go
-```
-
-### Discover available checkers:
-```bash
-./goperfcheck -list-checkers
-```
-Prints a table of every checker with its name, primary severity, theme group, and
-a one-line description of what it catches:
-```
-NAME              SEVERITY  GROUP         DESCRIPTION
------------------  --------- ------------- --------------------------------------------
-MemPrealloc       WARN      memory        append() in loops without capacity; make(map) without size hint
-ContextMisuse     ERROR     concurrency   context.Context stored in struct fields
-BufferedIO        WARN      io            unbuffered file writes in loops; missing Flush()
-...
-```
-
-### Run only one checker:
-```bash
-./goperfcheck -checker mem-prealloc
-./goperfcheck -checker context-misuse -severity ERROR
-```
-Pass an unknown name and the tool prints all valid checker names.
-
-### Run a group of related checkers:
-```bash
-./goperfcheck -group memory        # MemPrealloc, ObjectPool, StructAlign, InterfaceBoxing, LazyInit, StackAlloc, StringConcatLoop, RegexpCompile
-./goperfcheck -group concurrency   # GoroutinePool, ContextMisuse, AtomicMutex, TimeNowLoop, WaitGroupMisuse, DeferInLoop
-./goperfcheck -group io            # ZeroCopy, BufferedIO, Batching, HTTPClientReuse
-```
-Lower friction than naming individual checkers. Combine with other flags:
-```bash
-./goperfcheck -group concurrency -severity ERROR   # only concurrency errors
-./goperfcheck -group memory -output memory.md      # memory report
-./goperfcheck -group io -format json               # io issues as JSON
-```
-Pass an unknown group name and the tool prints all valid groups with their members.
-`-group` and `-checker` are mutually exclusive.
-
-### Check only files staged for the next git commit:
-```bash
-./goperfcheck -git-staged
-./goperfcheck -git-staged -severity WARN
-```
-This is useful as a pre-commit hook: it runs the checker only on the diff you are about to commit rather than the entire repository, keeping feedback fast.
-
-### Emit JSON for editor integrations:
-```bash
-./goperfcheck -format json
-./goperfcheck -file ./pkg/cache.go -format json
-```
-Output is a JSON array of issue objects. Fields: `checker`, `file`, `line`,
-`column`, `severity`, `message`, and optionally `rule` and `suggestion`.
-
-### Write a Markdown report:
-```bash
-./goperfcheck -output report.md
-./goperfcheck -dir ./myproject -output report.md -severity WARN
-```
-Issues are grouped by category with a summary table and per-category detail sections.
-
-### Write a SARIF report for GitHub Code Scanning:
-```bash
-./goperfcheck -dir . -output results.sarif
-```
-When `-output` ends in `.sarif`, the report is written as SARIF 2.1.0 instead of
-Markdown. Upload it to GitHub to get inline annotations on pull requests:
-
-```yaml
-# .github/workflows/perf.yml
-- name: Run goperfcheck
-  run: goperfcheck -dir . -output results.sarif
-  continue-on-error: true
-
-- name: Upload to GitHub Code Scanning
-  uses: github/codeql-action/upload-sarif@v3
-  with:
-    sarif_file: results.sarif
-```
-
-### Progress indicator:
-
-When scanning ≥ 50 files and stderr is an interactive terminal, a live counter
-is printed on stderr and updated every 150 ms:
-
-```
-Scanning... (1240/5000 files)
-```
-
-The line is erased before results appear — output is always clean. When stderr
-is piped or redirected (CI, log files) the indicator is suppressed automatically.
-There are no flags for this; it is always on in interactive mode.
-
-### Result cache (near-instant repeated runs):
-
-The tool caches parse and check results in `.goperfcheck-cache/` at the scan
-root. Each entry is keyed by `SHA-256(file content)` combined with a hash of the
-tool version and active checker set, so entries are automatically invalidated
-when a file changes or the binary is upgraded.
-
-```bash
-./goperfcheck               # first run: parses everything; populates cache
-./goperfcheck               # second run: cache hit for unchanged files — near-instant
-./goperfcheck -cache=false  # bypass cache entirely (useful in clean CI environments)
-```
-
-**What to add to `.gitignore`:**
-```
-.goperfcheck-cache/
-```
-
-The cache is safe under concurrent workers (atomic temp-file rename writes).
-Changing `-checker`, `-group`, or upgrading goperfcheck automatically busts all
-stale entries — you never need to clear it manually.
-
-### Control parallelism:
-```bash
-./goperfcheck                       # uses runtime.NumCPU() workers by default
-./goperfcheck -workers 4            # cap at 4 goroutines (useful in resource-constrained CI)
-./goperfcheck -workers 1            # single-threaded, deterministic output order
-```
-The directory walk fans work out to a pool of goroutines. Each worker parses
-its own files with an independent `token.FileSet`, so there is no lock contention.
-Final output is sorted by file and line regardless of completion order.
-
-### Suppress specific findings with inline comments:
-```go
-// Suppress all checkers on this line:
-result = append(result, v) //goperfcheck:ignore
-
-// Suppress a specific checker:
-result = append(result, v) //goperfcheck:ignore MemPrealloc
-
-// Suppress multiple checkers:
-result = append(result, v) //goperfcheck:ignore MemPrealloc,StructAlign
-
-// For loop-body issues, put the comment on the for/range line:
-for _, v := range items { //goperfcheck:ignore MemPrealloc
-    result = append(result, v)
-}
-```
-Suppression is per-line. The comment must appear on the flagged line or the
-`for`/`range` statement line when the issue is inside a loop body.
-
-### Auto-fix capacity hints:
-```bash
-./goperfcheck -fix
-./goperfcheck -file ./pkg/cache.go -fix
-./goperfcheck -dir ./myproject -fix -severity WARN
-```
-`-fix` rewrites source files in place to apply fixable suggestions:
-- `make(map[K]V)` → `make(map[K]V, hint)` — inserts the inferred capacity argument
-- `var x []T` immediately before a loop → `x := make([]T, 0, hint)` — replaces with
-  a preallocated slice (only when the declaration has no initializer or an explicit `nil`)
-
-After applying fixes, run the tool again without `-fix` to see any remaining issues
-that cannot be auto-fixed. The `-fix` flag is currently supported for `MemPrealloc`
-findings only; all other issue types are left unchanged.
-
-> **Caution**: `-fix` modifies source files directly. Commit or back up your work first.
-
-### Read from stdin (editor pipe integrations):
-```bash
-cat ./pkg/handler.go | goperfcheck -stdin
-goperfcheck -stdin < ./pkg/handler.go
-```
-Reads a Go source file from stdin instead of walking a directory or opening a file.
-Issues are reported with `<stdin>` as the file name. Works with `-format json`,
-`-output`, `-checker`, and `-severity`. Cannot be combined with `-file`, `-git-staged`,
-or `-fix`.
-
-Useful editor integrations:
-- **Vim**: `:!goperfcheck -stdin` (or wire to `makeprg`)
-- **shell pipe**: `cat foo.go | goperfcheck -stdin -format json | jq '.[].message'`
-- **LSP wrapper**: pipe the buffer content before save for instant feedback
-
-### ANSI color by severity:
-When stdout is a terminal, severity labels are automatically color-coded:
-- `[ERROR]` — bold red
-- `[WARN]`  — bold yellow
-- `[INFO]`  — dim/grey
-
-Colors are suppressed automatically when output is piped or redirected, so
-`goperfcheck | grep ERROR` always produces clean text.
-
-### CI-friendly / plain-text output:
-```bash
-./goperfcheck -no-color
-NO_COLOR=1 ./goperfcheck
-```
-Disables emoji, Unicode box-drawing, **and** ANSI colors. Useful in CI log
-viewers that don't handle terminal control codes (Jenkins, some GitLab runners).
-Respects the [NO_COLOR](https://no-color.org) standard — set the `NO_COLOR`
-environment variable to any value for the same effect.
-
-### Print version:
-```bash
-./goperfcheck -version
-```
-
-### Full option list:
-```bash
-./goperfcheck -help
-```
-
-## Configuration file
-
-Create a `.goperfcheck` file in your repository root to commit team-wide settings
-once instead of repeating flags on every invocation:
-
-```ini
-# goperfcheck project configuration
-# CLI flags always override these values.
-
-# Minimum severity to report (INFO | WARN | ERROR)
-severity = WARN
-
-# Skip *_test.go files
-skip-tests = true
-
-# Run only checkers in this group (memory | concurrency | io)
-# group = memory
-
-# Number of parallel workers (default: number of CPUs)
-# workers = 4
-
-# Disable result cache (enabled by default)
-# cache = false
-```
-
-**Discovery**: goperfcheck searches for `.goperfcheck` starting from the current
-working directory and walks up to the filesystem root, so running from any
-subdirectory of the repo finds the same file.
-
-**Precedence**: CLI flags always win over the config file. To override a config
-setting for one run: `goperfcheck -severity INFO` (even if config says `WARN`).
-
-**Recommended settings for config**: `severity`, `skip-tests`, `skip-vendor`,
-`workers`, `no-color`, `group`, `checker`, `format`, `cache`.
-
-**Not recommended in config**: `fix` (too destructive as a default), `stdin`,
-`git-staged`, `file`, `output` (these are always ad-hoc).
-
-Unknown keys print a warning to stderr and are ignored — the run continues.
-
-## Output Format
-
-Issues are grouped by file and include:
-
-- **File path** relative to the scanned directory
-- **Severity level** (ERROR/WARN/INFO)
-- **Checker name** (e.g., MemPrealloc, GoroutinePool)
-- **Location** (file:line:column)
-- **Message** explaining the issue
-- **Suggestion** for how to fix it
-
-Example (default):
-```
-📁 rma/aggregation/aggregation.go  (2 issue(s))
-   [WARN] StructAlign:64:2
-   ...
-   [ERROR] ContextMisuse:87:2
-   ...
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Found 20 performance issue(s): 1 ERROR · 8 WARN · 11 INFO
-```
-
-Full example with per-file headers:
-```
-📁 rma/aggregation/aggregation.go  (2 issue(s))
-   [WARN] StructAlign:64:2
-   ⚠  struct "AggregationsWork": field "RepairMode" (~1B) before "Emitter" (~8B) — misalignment causes padding waste
-   💡 Reorder fields largest → smallest: int64/pointers first, then int32, int16, bool/byte last
-
-   [ERROR] ContextMisuse:87:2
-   ⚠  context.Context stored in struct field "CTX" — contexts must never be stored in structs
-   💡 Pass context.Context as the first parameter to every function that needs it
-```
-
-Example (`-no-color` / `NO_COLOR`):
-```
--- rma/aggregation/aggregation.go  (2 issue(s))
-   [WARN] StructAlign:64:2
-   ! struct "AggregationsWork": field "RepairMode" (~1B) before "Emitter" (~8B) — misalignment causes padding waste
-   hint: Reorder fields largest → smallest: int64/pointers first, then int32, int16, bool/byte last
-
-   [ERROR] ContextMisuse:87:2
-   ! context.Context stored in struct field "CTX" — contexts must never be stored in structs
-   hint: Pass context.Context as the first parameter to every function that needs it
-```
-
-## Real-World Results
-
-When run on a typical Go project, the tool can identify hundreds of optimization opportunities:
-
-| Issue Category | Example Count |
+| | |
 |---|---|
-| Memory Preallocation | ~50-100 |
-| Goroutine Pools | ~30-80 |
-| Interface Boxing | ~20-50 |
-| Struct Alignment | ~5-20 |
-| Context Misuse | ~1-5 |
-| Buffered I/O | ~2-10 |
-| **Total** | **100s-1000s** |
+| [docs/checkers.md](docs/checkers.md) | Per-checker detail, capacity-hint inference, groups, how it works, limitations |
+| [docs/usage.md](docs/usage.md) | All flags, output formats, config file, suppression, cache, fix, SARIF |
+| [CHANGELOG.md](CHANGELOG.md) | Release history |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to add a checker, code style, PR process |
 
-## Performance Impact
+---
 
-Addressing all issues found by goperfcheck can yield:
+## Design
 
-- **Memory**: 5-10% reduction in struct sizes (through alignment fixes)
-- **GC**: 20-40% reduction in garbage collection pressure (via pooling)
-- **Throughput**: 2-12x improvement for I/O operations (via batching/buffering)
-- **Latency**: Elimination of unbounded goroutine creation risks
+- **No external dependencies** — only the Go standard library
+- **AST-only** — no `go/types`; fast, no build configuration required
+- **Parallel scanning** — one worker per CPU, each with its own `token.FileSet`
+- **Content-addressed cache** — `.goperfcheck-cache/` makes repeated runs near-instant
+- **Inline suppression** — `//goperfcheck:ignore CheckerName` per line
+- **Auto-fix** — `-fix` rewrites `MemPrealloc` findings in place
 
-## How It Works
-
-goperfcheck uses Go's AST (Abstract Syntax Tree) analysis to:
-
-1. Walk all `.go` files in the target directory (excluding vendor/ and test files)
-2. Parse each file without requiring full type information
-3. Apply 12 specialized checkers that look for anti-patterns
-4. Report violations with line numbers and fix suggestions
-
-No external dependencies - works with only Go's standard library.
-
-## Limitations
-
-- **Pattern-based**: Detection is based on AST patterns, not full type checking, so can have false positives
-- **Heuristics**: Some checks use heuristics (e.g., receiver variable names for batching detection)
-- **No dataflow**: Cannot track data flow across functions (e.g., proving a value doesn't escape)
-
-## For More Information
-
-See **https://goperf.dev** for in-depth explanations of each rule, benchmarks, and code examples.
+See **[goperf.dev](https://goperf.dev)** for the underlying performance principles.

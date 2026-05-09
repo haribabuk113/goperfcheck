@@ -1,0 +1,130 @@
+# Checker Reference
+
+goperfcheck ships 18 AST-based checkers grouped into three themes.
+Run `goperfcheck -list-checkers` to see this list at any time, or
+`goperfcheck -group <theme>` to run an entire theme at once.
+
+---
+
+## memory
+
+| Checker | Severity | What it catches |
+|---------|----------|-----------------|
+| **MemPrealloc** | WARN/INFO | `append()` in loops without capacity; `make(map)` without a size hint |
+| **ObjectPool** | WARN | High-churn allocations inside loops (bytes.Buffer, bufio.Writer, etc.) that could use `sync.Pool` |
+| **StructAlign** | WARN | Struct fields ordered small → large, wasting padding bytes |
+| **InterfaceBoxing** | INFO | `[]interface{}` params and empty-interface usage that causes heap boxing |
+| **LazyInit** | INFO | Expensive `init()` functions and package-level allocations that could be deferred |
+| **StackAlloc** | INFO | `new(primitiveType)` and `&localVar` returns that force heap allocation |
+| **StringConcatLoop** | WARN | `s += expr` or `s = s + expr` inside a loop — O(n²) allocations; use `strings.Builder` |
+| **RegexpCompile** | WARN | `regexp.Compile`/`MustCompile`/`CompilePOSIX`/`MustCompilePOSIX` inside a function body — compile once at package level |
+
+## concurrency
+
+| Checker | Severity | What it catches |
+|---------|----------|-----------------|
+| **GoroutinePool** | WARN | Unbounded goroutine creation inside loops — use a fixed worker pool |
+| **ContextMisuse** | ERROR | `context.Context` stored in a struct field — contexts must be passed as parameters |
+| **AtomicMutex** | INFO | Simple counters/flags guarded by a mutex — `sync/atomic` is faster |
+| **TimeNowLoop** | INFO | `time.Now()` inside a loop — each call is a syscall; cache before the loop |
+| **WaitGroupMisuse** | ERROR | `wg.Add(n)` called inside a goroutine literal — race: `Wait()` may return before the counter increments |
+| **DeferInLoop** | WARN | `defer` inside a `for`/`range` loop — fires at function return, not loop-iteration end; allocates a closure per iteration |
+
+## io
+
+| Checker | Severity | What it catches |
+|---------|----------|-----------------|
+| **ZeroCopy** | INFO | `append([]byte{}, src...)` — unnecessary buffer copy; use a slice reference for reads |
+| **BufferedIO** | WARN | Unbuffered file writes in loops; missing `Flush()` on `bufio.Writer` |
+| **Batching** | WARN | Individual DB/Redis/HTTP calls inside loops — collect and batch |
+| **HTTPClientReuse** | WARN | `http.Client{…}` created inside a function — each client has its own transport pool, abandoning connection reuse |
+
+---
+
+## MemPrealloc — capacity hint inference
+
+MemPrealloc is the most sophisticated checker. It infers the best hint from the
+surrounding AST rather than falling back to a fixed constant:
+
+| Loop pattern | Suggested hint |
+|---|---|
+| `for _, v := range items { append(...) }` | `make([]T, 0, len(items))` |
+| `for i := 0; i < n; i++ { append(...) }` | `make([]T, 0, n)` |
+| `for i := 0; i <= n; i++ { append(...) }` | `make([]T, 0, n+1)` |
+| `for _, v := range s.Items { append(...) }` | `make([]T, 0, len(s.Items))` |
+| `m := make(map[K]V)` + range-populate loop | `make(map[K]V, len(items))` |
+| No size derivable | `make([]T, 0, 8)` (conservative fallback) |
+
+**Why the 8-slot fallback beats no hint at all**: omitting a capacity causes the
+runtime to copy the backing array ≈log₂(finalLen) times as it doubles. Eight
+slots eliminates the first three doublings (0→1→2→4→8) — the most expensive
+ones relative to work done. For maps, Go rehashes at a load factor of ~6.5/8,
+so even `make(map[K]V, 8)` avoids the first rehash entirely.
+
+Nested loops are handled by stopping recursion at inner loops, so each
+`append` is attributed to its **innermost** enclosing loop with the most
+specific hint.
+
+---
+
+## Checker groups
+
+Use `-group <name>` to run an entire theme. Names are case-insensitive.
+
+```bash
+goperfcheck -group memory        # 8 checkers
+goperfcheck -group concurrency   # 6 checkers
+goperfcheck -group io            # 4 checkers
+```
+
+`-group` and `-checker` are mutually exclusive. Combine with other flags:
+
+```bash
+goperfcheck -group concurrency -severity ERROR
+goperfcheck -group memory -output memory.md
+```
+
+---
+
+## Targeting a single checker
+
+```bash
+goperfcheck -checker mem-prealloc
+goperfcheck -checker context-misuse -severity ERROR
+```
+
+Checker names are case-insensitive. Pass an unknown name and the tool prints all
+valid names.
+
+---
+
+## How it works
+
+goperfcheck uses Go's `go/ast` and `go/parser` packages to parse source files
+and apply pattern-matching rules — no full type-checking (`go/types`) is needed.
+This means it is fast and requires no build configuration, but it is
+pattern-based and may produce false positives in unusual code shapes.
+
+Each checker implements a single interface:
+
+```go
+type Checker interface {
+    Name() string
+    Check(fset *token.FileSet, file *ast.File) []Issue
+}
+```
+
+Files are parsed in parallel worker goroutines (one `token.FileSet` per worker,
+no shared mutable state). Results are deduplicated and sorted by file and line
+before output.
+
+---
+
+## Limitations
+
+- **Pattern-based, not type-checked**: detection uses AST patterns, not full
+  type information, so some checks can produce false positives in unusual code
+- **No dataflow analysis**: cannot prove a value escapes or track it across
+  function calls
+- **Heuristics**: some checks use naming conventions (e.g., receiver names for
+  batching detection) that may not match every codebase style

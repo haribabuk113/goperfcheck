@@ -10,7 +10,7 @@ import (
 func withDeferInLoop(n int) {
 	for i := 0; i < n; i++ {
 		f, _ := os.CreateTemp("", "bench")
-		defer f.Close() //nolint:staticcheck // intentional pattern under test
+		defer f.Close() //nolint:staticcheck,errcheck // intentional pattern under test
 	}
 }
 
@@ -20,7 +20,7 @@ func withImmediateClose(n int) {
 	for i := 0; i < n; i++ {
 		func() {
 			f, _ := os.CreateTemp("", "bench")
-			defer f.Close()
+			defer f.Close() //nolint:errcheck // benchmark: close error not meaningful
 		}()
 	}
 }

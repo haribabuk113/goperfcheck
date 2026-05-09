@@ -21,7 +21,7 @@ func BenchmarkHTTPClientPerRequest(b *testing.B) {
 		c := &http.Client{Timeout: 5 * time.Second}
 		resp, err := c.Get(srv.URL)
 		if err == nil {
-			resp.Body.Close()
+			resp.Body.Close() //nolint:errcheck // benchmark: body close error not meaningful
 		}
 	}
 }
@@ -40,7 +40,7 @@ func BenchmarkHTTPClientReused(b *testing.B) {
 	for b.Loop() {
 		resp, err := client.Get(srv.URL)
 		if err == nil {
-			resp.Body.Close()
+			resp.Body.Close() //nolint:errcheck // benchmark: body close error not meaningful
 		}
 	}
 }

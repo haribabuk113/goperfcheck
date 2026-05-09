@@ -40,7 +40,8 @@ func (c *MyRuleChecker) Check(fset *token.FileSet, file *ast.File) []Issue {
 
 3. Add table-driven tests in `checker/my_rule_test.go` (see existing `*_test.go` files for the pattern).
 
-4. Document the rule in `README.md` under the relevant category.
+4. Document the rule in `docs/checkers.md` — add a row to the group table and
+   a description entry. Also add a row to the compact checker table in `README.md`.
 
 ## Code style
 
@@ -53,5 +54,6 @@ func (c *MyRuleChecker) Check(fset *token.FileSet, file *ast.File) []Issue {
 
 - One logical change per PR.
 - Include a test that fails before your change and passes after.
-- Update `README.md` if you add or change a checker.
+- Update `docs/checkers.md` when you add or change a checker; update the compact
+  table in `README.md` to match.
 - Squash fixup commits before merging.

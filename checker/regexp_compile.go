@@ -65,10 +65,10 @@ func (v *regexpCompileVisitor) Visit(n ast.Node) ast.Visitor {
 }
 
 var regexpFuncs = map[string]bool{
-	"Compile":           true,
-	"MustCompile":       true,
-	"CompilePOSIX":      true,
-	"MustCompilePOSIX":  true,
+	"Compile":          true,
+	"MustCompile":      true,
+	"CompilePOSIX":     true,
+	"MustCompilePOSIX": true,
 }
 
 func isRegexpCompileCall(call *ast.CallExpr) bool {
