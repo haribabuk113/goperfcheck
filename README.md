@@ -153,6 +153,21 @@ make build        # produces ./goperfcheck
 ```
 Pass an unknown name and the tool prints all valid checker names.
 
+### Run a group of related checkers:
+```bash
+./goperfcheck -group memory        # MemPrealloc, ObjectPool, StructAlign, InterfaceBoxing, LazyInit, StackAlloc
+./goperfcheck -group concurrency   # GoroutinePool, ContextMisuse, AtomicMutex, TimeNowLoop, WaitGroupMisuse
+./goperfcheck -group io            # ZeroCopy, BufferedIO, Batching
+```
+Lower friction than naming individual checkers. Combine with other flags:
+```bash
+./goperfcheck -group concurrency -severity ERROR   # only concurrency errors
+./goperfcheck -group memory -output memory.md      # memory report
+./goperfcheck -group io -format json               # io issues as JSON
+```
+Pass an unknown group name and the tool prints all valid groups with their members.
+`-group` and `-checker` are mutually exclusive.
+
 ### Check only files staged for the next git commit:
 ```bash
 ./goperfcheck -git-staged

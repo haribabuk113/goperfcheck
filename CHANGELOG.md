@@ -10,6 +10,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- `-group` flag to run a themed subset of checkers in one shot:
+  - `memory` — MemPrealloc, ObjectPool, StructAlign, InterfaceBoxing, LazyInit, StackAlloc
+  - `concurrency` — GoroutinePool, ContextMisuse, AtomicMutex, TimeNowLoop, WaitGroupMisuse
+  - `io` — ZeroCopy, BufferedIO, Batching
+
+  Group resolution is case-insensitive. An unknown group name prints all valid groups
+  with their member checkers. `-group` and `-checker` are mutually exclusive.
+  `checker.Groups`, `checker.SortedGroupNames()`, and `checker.CheckersForGroup()` are
+  exported so library consumers can use the same grouping
 - `-stdin` flag: reads a Go source file from stdin instead of walking a directory or
   opening a named file. Issues are reported with `<stdin>` as the filename. Enables
   editor pipe integrations (`:!goperfcheck -stdin` in Vim, `cat foo.go | goperfcheck

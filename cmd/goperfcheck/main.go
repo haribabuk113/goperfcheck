@@ -43,6 +43,7 @@ func main() {
 	dir := flag.String("dir", ".", "root directory to scan (default: current directory)")
 	file := flag.String("file", "", "check a single Go file instead of scanning a directory")
 	checkerName := flag.String("checker", "", "run only the named checker (e.g. mem-prealloc); use -list-checkers to see all names")
+	group := flag.String("group", "", "run only checkers in a theme group: memory | concurrency | io")
 	skipVendor := flag.Bool("skip-vendor", true, "skip the vendor/ directory")
 	skipTests := flag.Bool("skip-tests", false, "skip *_test.go files")
 	severity := flag.String("severity", "INFO", "minimum severity to report: INFO | WARN | ERROR")
@@ -92,6 +93,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if *checkerName != "" && *group != "" {
+		fmt.Fprintf(os.Stderr, "error: -checker and -group cannot be used together\n")
+		os.Exit(1)
+	}
+
 	minSev := parseSeverity(*severity)
 
 	allCheckers := checker.AllCheckers()
@@ -108,6 +114,19 @@ func main() {
 			fmt.Fprintf(os.Stderr, "unknown checker %q — valid names:\n", *checkerName)
 			for _, c := range allCheckers {
 				fmt.Fprintf(os.Stderr, "  %s\n", c.Name())
+			}
+			os.Exit(1)
+		}
+		allCheckers = matched
+	}
+
+	if *group != "" {
+		matched, ok := checker.CheckersForGroup(*group, allCheckers)
+		if !ok {
+			fmt.Fprintf(os.Stderr, "unknown group %q — valid groups:\n", *group)
+			for _, g := range checker.SortedGroupNames() {
+				checkerNames := checker.Groups[g]
+				fmt.Fprintf(os.Stderr, "  %-14s %s\n", g, strings.Join(checkerNames, ", "))
 			}
 			os.Exit(1)
 		}
