@@ -104,9 +104,21 @@ func (c *StructAlignChecker) Check(fset *token.FileSet, file *ast.File) []Issue 
 
 		// Detect "bad" transitions: small field immediately before significantly larger one.
 		// This indicates potential padding waste.
+		exported := len(ts.Name.Name) > 0 && ts.Name.Name[0] >= 'A' && ts.Name.Name[0] <= 'Z'
 		for i := 0; i < len(fields)-1; i++ {
 			if fields[i].size < fields[i+1].size && fields[i].size <= 4 && fields[i+1].size >= 8 {
 				p := fset.Position(fields[i].pos)
+
+				suggestion := "Reorder fields largest → smallest: int64/pointers first, then int32, int16, bool/byte last"
+				if exported {
+					suggestion = fmt.Sprintf(
+						"Exported type — audit callers for positional struct literals (%s{v1, v2, …}) before reordering; "+
+							"reordering exported fields is a breaking API change for any caller that omits field names. "+
+							"If all call sites use named fields: reorder largest → smallest, int64/pointers first, then int32, int16, bool/byte last",
+						ts.Name.Name,
+					)
+				}
+
 				issues = append(issues, Issue{
 					Checker:  c.Name(),
 					File:     p.Filename,
@@ -119,7 +131,7 @@ func (c *StructAlignChecker) Check(fset *token.FileSet, file *ast.File) []Issue 
 						fields[i+1].name, fields[i+1].size,
 					),
 					Rule:       "Struct Field Alignment — https://goperf.dev/01-common-patterns/fields-alignment/",
-					Suggestion: "Reorder fields largest → smallest: int64/pointers first, then int32, int16, bool/byte last",
+					Suggestion: suggestion,
 					Benchmark:  "32B → 24B per instance (25% less memory) for a {bool,int64,bool,int64} struct — GC work scales with live heap size (Go 1.26 benchmark, see benchmarks/)",
 				})
 				break // one issue per struct

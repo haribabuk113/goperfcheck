@@ -42,6 +42,56 @@ Run `goperfcheck -list-checkers` to see this list at any time, or
 
 ---
 
+## StructAlign — exported types and API safety
+
+Reordering struct fields to eliminate padding is a safe, zero-risk change for
+**unexported types** — only code in the same package can reference them.
+
+For **exported types** the picture is different. Any caller that initialises the
+struct with positional (unnamed) fields will fail to compile after a reorder:
+
+```go
+// caller in another package — positional literal
+r := mypkg.Request{true, 42, "alice"}  // breaks if fields are reordered
+
+// caller using named fields — safe regardless of field order
+r := mypkg.Request{ok: true, id: 42, name: "alice"}
+```
+
+When goperfcheck detects padding waste in an exported struct it includes this
+caveat in the suggestion:
+
+```
+💡 Exported type — audit callers for positional struct literals (Request{v1, v2, …})
+   before reordering; reordering exported fields is a breaking API change for any
+   caller that omits field names. If all call sites use named fields: reorder
+   largest → smallest, int64/pointers first, then int32, int16, bool/byte last
+```
+
+**Before applying the fix to an exported struct**:
+
+1. Search your own repo and any known dependents:
+   ```bash
+   grep -rn 'Request{[^}]*}' ./...   # look for positional literals
+   ```
+2. Check whether the package is consumed externally (published module). If so,
+   treat a field reorder as a minor-version bump in a module that hasn't reached
+   v1, or a major version bump after v1.
+3. If all callers use named fields, the reorder is safe — apply it and the
+   suggestion becomes a zero-risk memory win.
+
+To suppress the finding on a type you have already audited:
+
+```go
+type Request struct { //goperfcheck:ignore StructAlign
+    ok   bool
+    id   int64
+    name string
+}
+```
+
+---
+
 ## MemPrealloc — capacity hint inference
 
 MemPrealloc is the most sophisticated checker. It infers the best hint from the

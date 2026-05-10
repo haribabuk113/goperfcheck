@@ -53,11 +53,16 @@ var Metadata = map[string]CheckerMeta{
 			"    b int64 // 8 bytes\n" +
 			"    c bool  // 1 byte + 7 bytes padding\n" +
 			"} // sizeof = 24",
-		GoodExample: "type T struct {\n" +
+		GoodExample: "// For unexported or internal types: reorder freely\n" +
+			"type t struct {\n" +
 			"    b int64 // 8 bytes\n" +
 			"    a bool  // 1 byte\n" +
 			"    c bool  // 1 byte + 6 bytes padding\n" +
-			"} // sizeof = 16",
+			"} // sizeof = 16\n" +
+			"\n" +
+			"// For exported types: grep for positional literals first\n" +
+			"// T{val1, val2, val3} — these break if fields are reordered\n" +
+			"// T{a: val1, b: val2} — named fields are safe to reorder",
 	},
 	"InterfaceBoxing": {
 		Severity:    "INFO",

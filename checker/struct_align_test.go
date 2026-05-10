@@ -3,6 +3,7 @@ package checker
 import (
 	"go/parser"
 	"go/token"
+	"strings"
 	"testing"
 )
 
@@ -67,4 +68,62 @@ type Small struct {
 			}
 		})
 	}
+}
+
+func TestStructAlignExportedWarning(t *testing.T) {
+	c := &StructAlignChecker{}
+
+	exportedSrc := `package p
+type Request struct {
+	ok   bool
+	id   int64
+	name string
+}`
+
+	unexportedSrc := `package p
+type request struct {
+	ok   bool
+	id   int64
+	name string
+}`
+
+	parse := func(src string) []Issue {
+		fset := token.NewFileSet()
+		f, err := parser.ParseFile(fset, "test.go", src, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c.Check(fset, f)
+	}
+
+	t.Run("exported struct carries API-safety caveat in suggestion", func(t *testing.T) {
+		issues := parse(exportedSrc)
+		if len(issues) != 1 {
+			t.Fatalf("got %d issue(s), want 1", len(issues))
+		}
+		sug := issues[0].Suggestion
+		if !strings.Contains(sug, "Exported type") {
+			t.Errorf("suggestion for exported struct missing API-safety caveat; got: %q", sug)
+		}
+		if !strings.Contains(sug, "positional struct literals") {
+			t.Errorf("suggestion for exported struct missing positional-literal mention; got: %q", sug)
+		}
+		if !strings.Contains(sug, "breaking API change") {
+			t.Errorf("suggestion for exported struct missing breaking-change warning; got: %q", sug)
+		}
+	})
+
+	t.Run("unexported struct uses standard reorder suggestion", func(t *testing.T) {
+		issues := parse(unexportedSrc)
+		if len(issues) != 1 {
+			t.Fatalf("got %d issue(s), want 1", len(issues))
+		}
+		sug := issues[0].Suggestion
+		if strings.Contains(sug, "Exported type") {
+			t.Errorf("suggestion for unexported struct should not mention exported type; got: %q", sug)
+		}
+		if !strings.Contains(sug, "Reorder fields") {
+			t.Errorf("suggestion for unexported struct should contain reorder guidance; got: %q", sug)
+		}
+	})
 }

@@ -9,6 +9,20 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+- **StructAlign**: the suggestion now branches on whether the flagged struct is
+  exported. For unexported types the suggestion is unchanged. For exported types
+  it reads: *"Exported type — audit callers for positional struct literals
+  (T{v1, v2, …}) before reordering; reordering exported fields is a breaking
+  API change for any caller that omits field names. If all call sites use named
+  fields: reorder largest → smallest, int64/pointers first, then int32, int16,
+  bool/byte last"* — preventing a silent API break when a team follows the
+  suggestion on a public library. Detection is purely name-based (uppercase first
+  character); the check does not depend on build tags or module visibility.
+  `docs/checkers.md` gains a dedicated `StructAlign` section explaining the
+  exported-type risk, how to grep for positional literals, and the suppression
+  comment pattern.
+
 ### Added
 - **SyncMapMisuse** checker (WARN, concurrency group): flags `sync.Map` struct
   fields, `var m sync.Map` declarations, and `m := sync.Map{}` short declarations.
