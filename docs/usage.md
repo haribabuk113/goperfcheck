@@ -39,6 +39,7 @@ goperfcheck -help                    # print all flags
 | `-stdin` | `false` | Read Go source from stdin |
 | `-no-color` | `false` | Disable ANSI color and emoji (also: `NO_COLOR` env var) |
 | `-list-checkers` | `false` | Print checker table and exit |
+| `-audit-suppressions` | `false` | Report stale and expired `//goperfcheck:ignore` comments, then exit |
 | `-version` | `false` | Print version and exit |
 
 ---
@@ -195,6 +196,69 @@ for _, v := range items { //goperfcheck:ignore MemPrealloc
     result = append(result, v)
 }
 ```
+
+### Expiry annotations (`until:`)
+
+Add `until:YYYY-MM-DD` to set an expiry date on a suppression. Once that date
+passes the comment stops suppressing — the issue resurfaces automatically so
+the team is reminded to re-evaluate the decision:
+
+```go
+// Suppress until a planned refactor is merged (then this comment auto-expires):
+for _, v := range items { //goperfcheck:ignore MemPrealloc until:2026-09-01
+    result = append(result, v)
+}
+
+// Works with specific or wildcard suppression:
+result = append(result, v) //goperfcheck:ignore until:2026-09-01
+```
+
+### Auditing suppressions (`-audit-suppressions`)
+
+Over time suppressions can go stale — the underlying issue gets fixed but the
+`//goperfcheck:ignore` comment remains. Run the audit to find dead comments:
+
+```bash
+goperfcheck -audit-suppressions          # scan current directory
+goperfcheck -audit-suppressions -dir ./pkg
+goperfcheck -audit-suppressions -file ./pkg/handler.go
+```
+
+Example output when problems are found:
+
+```
+Suppression audit
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Found 2 problematic suppression(s) of 7 total (2 stale, 1 expired).
+
+📁 pkg/handler.go
+   line 42   [STALE]    //goperfcheck:ignore MemPrealloc
+   line 87   [STALE]    //goperfcheck:ignore
+
+📁 pkg/cache.go
+   line 103  [EXPIRED]  //goperfcheck:ignore StructAlign until:2026-04-01
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Stale: the suppressed checker no longer fires — safe to remove the comment.
+Expired: the until: date has passed — revisit and remove or renew the suppression.
+```
+
+| Status | Meaning | Action |
+|--------|---------|--------|
+| **STALE** | The named checker no longer fires on that line | Remove the comment |
+| **EXPIRED** | The `until:` date has passed | Revisit — remove or set a new date |
+
+Exit code 0 when all suppressions are active; exit code 1 when stale or expired
+entries are found. Suitable as a periodic CI check:
+
+```yaml
+- name: Audit suppression debt
+  run: goperfcheck -audit-suppressions -dir .
+```
+
+`-audit-suppressions` always runs **all** checkers regardless of `-checker` or
+`-group` filters, ensuring stale detection is accurate. It is incompatible with
+`-stdin`.
 
 ---
 

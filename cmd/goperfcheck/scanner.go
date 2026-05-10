@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/haribabuk113/goperfcheck/checker"
 )
@@ -113,6 +114,78 @@ func scanFiles(paths []string, checkers []checker.Checker, skipTests, skipGenera
 	}()
 
 	var all []checker.Issue
+	for batch := range results {
+		all = append(all, batch...)
+	}
+	return all
+}
+
+// auditFileConcurrent parses a single file, runs ALL checkers without
+// filtering suppressions, and returns suppression audit data. Unlike
+// checkFileConcurrent it never reads from or writes to the cache, since the
+// cache stores post-filter issues and stale detection requires raw issues.
+func auditFileConcurrent(path string, checkers []checker.Checker, skipGenerated bool, today time.Time) []checker.SuppressedIssue {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "read error %s: %v\n", path, err)
+		return nil
+	}
+	fset := token.NewFileSet()
+	astFile, parseErr := parser.ParseFile(fset, path, content, parser.AllErrors|parser.ParseComments)
+	if parseErr != nil {
+		fmt.Fprintf(os.Stderr, "parse error %s: %v\n", path, parseErr)
+		return nil
+	}
+	if skipGenerated && isGeneratedFile(astFile) {
+		return nil
+	}
+	var rawIssues []checker.Issue
+	for _, c := range checkers {
+		rawIssues = append(rawIssues, c.Check(fset, astFile)...)
+	}
+	return checker.CollectSuppressions(fset, astFile, rawIssues, today)
+}
+
+// auditFiles runs auditFileConcurrent on all paths in parallel and returns
+// the combined suppression audit data. Results arrive in non-deterministic
+// order; callers are expected to sort.
+func auditFiles(paths []string, checkers []checker.Checker, skipTests, skipGenerated bool, numWorkers int, today time.Time) []checker.SuppressedIssue {
+	if len(paths) == 0 {
+		return nil
+	}
+
+	jobs := make(chan string)
+	results := make(chan []checker.SuppressedIssue)
+
+	var wg sync.WaitGroup
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for path := range jobs {
+				if skipTests && strings.HasSuffix(path, "_test.go") {
+					continue
+				}
+				if batch := auditFileConcurrent(path, checkers, skipGenerated, today); len(batch) > 0 {
+					results <- batch
+				}
+			}
+		}()
+	}
+
+	go func() {
+		for _, p := range paths {
+			jobs <- p
+		}
+		close(jobs)
+	}()
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	var all []checker.SuppressedIssue
 	for batch := range results {
 		all = append(all, batch...)
 	}

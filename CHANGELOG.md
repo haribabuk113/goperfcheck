@@ -9,6 +9,46 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+- **Suppression expiry (`until:`)**: `//goperfcheck:ignore MemPrealloc until:2026-09-01`
+  attaches a date-bound lifetime to any suppression comment. When the date passes
+  the suppression automatically stops hiding the issue — the checker finding resurfaces
+  in normal output so the team is prompted to re-evaluate the decision. Works with
+  both single-checker and wildcard (`//goperfcheck:ignore until:DATE`) suppression
+  forms. Date is parsed as `YYYY-MM-DD`; invalid dates are silently ignored
+  (suppression remains active). Implemented inside `FilterSuppressed` with no
+  signature change — zero impact on existing code or cached results.
+
+- **`-audit-suppressions` flag**: scans all Go files, runs every checker without
+  suppression filtering, and cross-references the raw findings against
+  `//goperfcheck:ignore` comments to produce a suppression health report.
+  A suppression is **stale** when none of its covered checkers fire on the annotated
+  line(s), and **expired** when its `until:` date has passed. Output is grouped by
+  file, listing only problematic entries with their reconstructed comment text.
+  Exit code 0 = all suppressions healthy; exit code 1 = stale or expired entries
+  found — suitable as a periodic CI job. Always runs all checkers regardless of
+  `-checker`/`-group` filters so stale detection is complete and accurate.
+  Incompatible with `-stdin` (suppressions in ephemeral input have no persistence
+  value).
+
+  Example output:
+  ```
+  Suppression audit
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Found 2 problematic suppression(s) of 7 total (2 stale, 1 expired).
+
+  📁 pkg/handler.go
+     line 42   [STALE]    //goperfcheck:ignore MemPrealloc
+     line 87   [STALE]    //goperfcheck:ignore
+
+  📁 pkg/cache.go
+     line 103  [EXPIRED]  //goperfcheck:ignore StructAlign until:2026-04-01
+
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Stale: the suppressed checker no longer fires — safe to remove the comment.
+  Expired: the until: date has passed — revisit and remove or renew the suppression.
+  ```
+
 ### Changed
 - **StructAlign**: the suggestion now branches on whether the flagged struct is
   exported. For unexported types the suggestion is unchanged. For exported types

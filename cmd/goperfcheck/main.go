@@ -34,6 +34,7 @@ import (
 	"sort"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/haribabuk113/goperfcheck/checker"
 )
@@ -59,6 +60,7 @@ func main() {
 	cache := flag.Bool("cache", true, "cache parse+check results in .goperfcheck-cache/ (keyed by file hash); near-instant re-runs on unchanged files")
 	stdin := flag.Bool("stdin", false, "read Go source from stdin instead of a file or directory")
 	listCheckers := flag.Bool("list-checkers", false, "print all checkers with severity, group, and description, then exit")
+	auditSuppressions := flag.Bool("audit-suppressions", false, "report stale and expired //goperfcheck:ignore comments, then exit")
 	showVersion := flag.Bool("version", false, "print version and exit")
 
 	// Load .goperfcheck config before flag.Parse so CLI flags take precedence.
@@ -127,6 +129,10 @@ func main() {
 	}
 	if *stdin && *gitStaged {
 		fmt.Fprintf(os.Stderr, "error: -stdin and -git-staged cannot be used together\n")
+		os.Exit(1)
+	}
+	if *stdin && *auditSuppressions {
+		fmt.Fprintf(os.Stderr, "error: -audit-suppressions cannot be used with -stdin\n")
 		os.Exit(1)
 	}
 
@@ -281,6 +287,17 @@ func main() {
 		// Skip generated files for directory/git-staged scans but not for
 		// explicit -file (user intent takes precedence).
 		useSkipGenerated := *skipGenerated && *file == ""
+
+		if *auditSuppressions {
+			today := time.Now().Truncate(24 * time.Hour)
+			// Always run all checkers for accurate stale detection regardless of
+			// -checker/-group filters; the goal is to find dead suppression comments.
+			allSuppressed := auditFiles(paths, checker.AllCheckers(), *skipTests, useSkipGenerated, numW, today)
+			if printAuditReport(allSuppressed, *dir, plain) {
+				os.Exit(1)
+			}
+			return
+		}
 
 		absRoot, _ := filepath.Abs(*dir)
 		cc := buildCacheConfig(*cache, filepath.Join(absRoot, cacheDirName), allCheckers)
