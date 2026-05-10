@@ -29,6 +29,7 @@ Run `goperfcheck -list-checkers` to see this list at any time, or
 | **TimeNowLoop** | INFO | `time.Now()` inside a loop — each call is a syscall; cache before the loop |
 | **WaitGroupMisuse** | ERROR | `wg.Add(n)` called inside a goroutine literal — race: `Wait()` may return before the counter increments |
 | **DeferInLoop** | WARN | `defer` inside a `for`/`range` loop — fires at function return, not loop-iteration end; allocates a closure per iteration |
+| **SyncMapMisuse** | WARN | `sync.Map` where `map+sync.RWMutex` is faster — sync.Map boxes every key/value as `interface{}` and is only beneficial for append-only caches or per-goroutine disjoint key sets |
 
 ## io
 
@@ -67,13 +68,52 @@ specific hint.
 
 ---
 
+## SyncMapMisuse — when sync.Map is and isn't appropriate
+
+`sync.Map` is optimised for exactly two access patterns:
+
+| Pattern | sync.Map wins | Reason |
+|---------|:---:|--------|
+| Append-only cache (write once, read many) | ✓ | Read path is fully lock-free after initial Store |
+| Per-goroutine disjoint key sets | ✓ | No contention between goroutines by construction |
+| Growing registry (new keys added over time) | ✗ | Each Store on a new key grows the dirty map; promotion on next Load miss allocates |
+| Mixed read/write on shared keys | ✗ | Dirty-to-read promotion adds overhead every write cycle |
+| Single-goroutine or low-concurrency code | ✗ | No contention to amortise; boxing overhead dominates |
+
+**Why the allocation cost matters**: `sync.Map` stores all keys and values as `interface{}`.
+Every `Store` call boxes the key and value onto the heap — measured at **3 allocs/op**
+compared to **0 allocs/op** for `map[K]V + sync.RWMutex`. At scale this
+increases GC pause frequency and overall memory pressure.
+
+```
+sequential store+load (no contention):
+  sync.Map:           662 ns/op   117 B/op   3 allocs/op
+  map+sync.RWMutex:   308 ns/op    58 B/op   0 allocs/op  ← 2× faster, zero boxing
+```
+
+**When sync.Map genuinely wins** (high-contention read-only stable key set):
+```
+parallel reads, 8 goroutines, stable 64-key set:
+  sync.Map:           4.4 ns/op   0 B/op   0 allocs/op   ← 9× faster
+  map+sync.RWMutex:  39.7 ns/op   0 B/op   0 allocs/op
+```
+
+If you have this pattern, suppress the finding with `//goperfcheck:ignore SyncMapMisuse`.
+
+**Patterns detected**:
+- `sync.Map` or `*sync.Map` as a struct field
+- `var m sync.Map` / `var m *sync.Map` (package-level or local)
+- `m := sync.Map{}` (short variable declaration)
+
+---
+
 ## Checker groups
 
 Use `-group <name>` to run an entire theme. Names are case-insensitive.
 
 ```bash
 goperfcheck -group memory        # 8 checkers
-goperfcheck -group concurrency   # 6 checkers
+goperfcheck -group concurrency   # 7 checkers
 goperfcheck -group io            # 4 checkers
 ```
 

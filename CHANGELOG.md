@@ -10,6 +10,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- **SyncMapMisuse** checker (WARN, concurrency group): flags `sync.Map` struct
+  fields, `var m sync.Map` declarations, and `m := sync.Map{}` short declarations.
+  `sync.Map` is only faster than `map[K]V + sync.RWMutex` in two narrow cases —
+  append-only caches (written once, read many times) and per-goroutine disjoint
+  key sets. In all other patterns it is measurably slower and boxes every
+  key/value as `interface{}`, paying 3 heap allocations per `Store` vs 0 for
+  `map+RWMutex`. Benchmark: sequential store+load 662 ns/op, 3 allocs/op vs
+  308 ns/op, 0 allocs/op. Includes a `benchmarks/sync_map_misuse_bench_test.go`
+  with sequential (misuse) and high-contention read-only (legitimate) pairs.
 - `explain` subcommand: `goperfcheck explain <CheckerName>` prints what a checker
   looks for, a short bad/good code example, and the goperf.dev reference URL —
   making the tool self-documenting at the terminal without needing the README.
@@ -17,7 +26,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   argument lists all available checker names with their one-line descriptions.
   Respects `-no-color` and `NO_COLOR` for the severity label color.
 - `CheckerMeta` now carries three new exported fields: `Link` (goperf.dev URL),
-  `BadExample`, and `GoodExample` (code snippets used by `explain`). All 18
+  `BadExample`, and `GoodExample` (code snippets used by `explain`). All 19
   checkers are populated.
 
 ---

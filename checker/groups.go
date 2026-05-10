@@ -9,7 +9,7 @@ import (
 // Names are lower-cased keys; checker names match Checker.Name() exactly.
 var Groups = map[string][]string{
 	"memory":      {"MemPrealloc", "ObjectPool", "StructAlign", "InterfaceBoxing", "LazyInit", "StackAlloc", "StringConcatLoop", "RegexpCompile"},
-	"concurrency": {"GoroutinePool", "ContextMisuse", "AtomicMutex", "TimeNowLoop", "WaitGroupMisuse", "DeferInLoop"},
+	"concurrency": {"GoroutinePool", "ContextMisuse", "AtomicMutex", "TimeNowLoop", "WaitGroupMisuse", "DeferInLoop", "SyncMapMisuse"},
 	"io":          {"ZeroCopy", "BufferedIO", "Batching", "HTTPClientReuse"},
 }
 

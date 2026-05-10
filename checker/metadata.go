@@ -246,6 +246,23 @@ var Metadata = map[string]CheckerMeta{
 			"    return digitRe.MatchString(s)\n" +
 			"}",
 	},
+	"SyncMapMisuse": {
+		Severity:    "WARN",
+		Group:       "concurrency",
+		Description: "sync.Map where map+sync.RWMutex is faster — only use sync.Map for append-only caches or disjoint key sets",
+		Link:        "https://goperf.dev/01-common-patterns/sync-map/",
+		BadExample: "// common misuse: sync.Map as a general-purpose concurrent map\n" +
+			"type Registry struct {\n" +
+			"    entries sync.Map\n" +
+			"}\n" +
+			"// Store boxes every key+value as interface{}: 3 allocs/op vs 0",
+		GoodExample: "// use map + RWMutex for growing maps or mixed read/write workloads\n" +
+			"type Registry struct {\n" +
+			"    mu      sync.RWMutex\n" +
+			"    entries map[string]Entry\n" +
+			"}\n" +
+			"// sync.Map is correct only when keys are written once then read many times",
+	},
 	"HTTPClientReuse": {
 		Severity:    "WARN",
 		Group:       "io",

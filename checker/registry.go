@@ -21,5 +21,6 @@ func AllCheckers() []Checker {
 		&StringConcatLoopChecker{},
 		&RegexpCompileChecker{},
 		&HTTPClientReuseChecker{},
+		&SyncMapMisuseChecker{},
 	}
 }
