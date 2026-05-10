@@ -26,16 +26,16 @@ type FixHint struct {
 
 // Issue represents one performance problem found in source code.
 type Issue struct {
-	Checker     string   `json:"checker"`
-	File        string   `json:"file"`
-	Line        int      `json:"line"`
-	Column      int      `json:"column"`
-	Severity    Severity `json:"severity"`
-	Message     string   `json:"message"`
-	Rule        string   `json:"rule,omitempty"`
-	Suggestion  string   `json:"suggestion,omitempty"`
-	Benchmark   string   `json:"benchmark,omitempty"`
-	Fix         *FixHint `json:"fix,omitempty"`
+	Checker    string   `json:"checker"`
+	File       string   `json:"file"`
+	Line       int      `json:"line"`
+	Column     int      `json:"column"`
+	Severity   Severity `json:"severity"`
+	Message    string   `json:"message"`
+	Rule       string   `json:"rule,omitempty"`
+	Suggestion string   `json:"suggestion,omitempty"`
+	Benchmark  string   `json:"benchmark,omitempty"`
+	Fix        *FixHint `json:"fix,omitempty"`
 	// VersionNote is set by ApplyGoVersion when the advice changes or may not
 	// apply for the detected Go version. Empty for most issues.
 	VersionNote string `json:"version_note,omitempty"`

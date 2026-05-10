@@ -25,12 +25,12 @@ const (
 
 // CheckerMeta holds display information printed by -list-checkers and explain.
 type CheckerMeta struct {
-	Severity    string     // primary severity level this checker reports
-	Group       string     // theme group (memory | concurrency | io)
-	Description string     // one-line description of what it catches
-	Link        string     // goperf.dev reference URL
-	BadExample  string     // short code snippet that triggers the checker
-	GoodExample string     // preferred alternative
+	Severity    string // primary severity level this checker reports
+	Group       string // theme group (memory | concurrency | io)
+	Description string // one-line description of what it catches
+	Link        string // goperf.dev reference URL
+	BadExample  string // short code snippet that triggers the checker
+	GoodExample string // preferred alternative
 
 	// Confidence is how reliably this checker avoids false positives.
 	// HIGH = structurally reliable; MEDIUM = verify context; LOW = verify always.
@@ -238,7 +238,7 @@ var Metadata = map[string]CheckerMeta{
 			"    row, _ := db.QueryRow(ctx, \"SELECT * FROM t WHERE id=?\", id) // N round-trips\n" +
 			"}",
 		GoodExample: "rows, _ := db.Query(ctx, \"SELECT * FROM t WHERE id IN (?)\", ids) // 1 round-trip",
-		Confidence: ConfidenceMedium,
+		Confidence:  ConfidenceMedium,
 		FalsePositiveNote: "Cannot determine whether the in-loop call is already mediated " +
 			"by a batch-aware client, whether the API supports batching, or whether the " +
 			"loop runs infrequently enough that per-call overhead is acceptable.",
