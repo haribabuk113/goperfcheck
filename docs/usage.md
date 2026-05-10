@@ -10,6 +10,7 @@ goperfcheck -severity ERROR          # show only ERROR (critical issues)
 goperfcheck -file ./pkg/handler.go   # check a single file
 goperfcheck -git-staged              # check only files staged for commit (pre-commit hook)
 goperfcheck -list-checkers           # print all checkers with group and description
+goperfcheck explain MemPrealloc      # show what a checker looks for + bad/good examples
 goperfcheck -version                 # print version
 goperfcheck -help                    # print all flags
 ```
@@ -130,6 +131,47 @@ instead of Markdown. Upload to GitHub for inline PR annotations:
   with:
     sarif_file: results.sarif
 ```
+
+---
+
+## explain subcommand
+
+`explain` is the fastest way to understand a finding without leaving the terminal.
+It shows what the checker looks for, the goperf.dev reference, and a short bad/good
+code example — making it easy to decide whether a result is a false positive.
+
+```bash
+goperfcheck explain MemPrealloc      # by exact name
+goperfcheck explain memprealloc      # case-insensitive
+goperfcheck explain                  # list all checker names
+```
+
+Example output:
+
+```
+Checker:     MemPrealloc
+Severity:    [WARN]
+Group:       memory
+Description: append() in loops without capacity; make(map) without size hint
+Docs:        https://goperf.dev/01-common-patterns/mem-prealloc/
+
+─────────────────────────────────────────────────
+Bad (will trigger):
+  var result []string
+  for _, v := range items {
+      result = append(result, v) // reallocates repeatedly
+  }
+
+─────────────────────────────────────────────────
+Good (preferred):
+  result := make([]string, 0, len(items))
+  for _, v := range items {
+      result = append(result, v)
+  }
+```
+
+Checker names are case-insensitive. The color of the severity label respects
+`-no-color` and `NO_COLOR`.
 
 ---
 

@@ -99,6 +99,12 @@ func main() {
 		return
 	}
 
+	// "explain" is a subcommand, not a flag: goperfcheck explain <CheckerName>
+	if args := flag.Args(); len(args) >= 1 && strings.EqualFold(args[0], "explain") {
+		runExplain(args[1:], colorEnabled)
+		return
+	}
+
 	if *listCheckers {
 		fmt.Printf("%-17s %-9s %-13s %s\n", "NAME", "SEVERITY", "GROUP", "DESCRIPTION")
 		fmt.Printf("%s %s %s %s\n",
@@ -417,6 +423,59 @@ func printJSON(issues []checker.Issue) {
 		fmt.Fprintf(os.Stderr, "json encode error: %v\n", err)
 		os.Exit(2)
 	}
+}
+
+// runExplain prints the full explanation for a named checker and exits.
+// args contains the positional arguments after "explain"; colorEnabled controls ANSI output.
+func runExplain(args []string, colorEnabled bool) {
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "usage: goperfcheck explain <checker-name>")
+		fmt.Fprintln(os.Stderr, "\nAvailable checkers:")
+		for _, c := range checker.AllCheckers() {
+			meta := checker.Metadata[c.Name()]
+			fmt.Fprintf(os.Stderr, "  %-17s %s\n", c.Name(), meta.Description)
+		}
+		os.Exit(1)
+	}
+
+	name := args[0]
+	var canonicalName string
+	var meta checker.CheckerMeta
+	for n, m := range checker.Metadata {
+		if strings.EqualFold(n, name) {
+			canonicalName = n
+			meta = m
+			break
+		}
+	}
+	if canonicalName == "" {
+		fmt.Fprintf(os.Stderr, "unknown checker %q\n\nRun 'goperfcheck explain' to list all checkers.\n", name)
+		os.Exit(1)
+	}
+
+	sep := "─────────────────────────────────────────────────"
+	fmt.Printf("Checker:     %s\n", canonicalName)
+	fmt.Printf("Severity:    %s\n", coloredSeverity(checker.Severity(meta.Severity), colorEnabled))
+	fmt.Printf("Group:       %s\n", meta.Group)
+	fmt.Printf("Description: %s\n", meta.Description)
+	if meta.Link != "" {
+		fmt.Printf("Docs:        %s\n", meta.Link)
+	}
+	if meta.BadExample != "" {
+		fmt.Printf("\n%s\n", sep)
+		fmt.Println("Bad (will trigger):")
+		for _, line := range strings.Split(meta.BadExample, "\n") {
+			fmt.Printf("  %s\n", line)
+		}
+	}
+	if meta.GoodExample != "" {
+		fmt.Printf("\n%s\n", sep)
+		fmt.Println("Good (preferred):")
+		for _, line := range strings.Split(meta.GoodExample, "\n") {
+			fmt.Printf("  %s\n", line)
+		}
+	}
+	fmt.Printf("\n%s\n", sep)
 }
 
 func parseSeverity(s string) checker.Severity {

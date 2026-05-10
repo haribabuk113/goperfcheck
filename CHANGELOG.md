@@ -7,6 +7,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [Unreleased]
+
+### Added
+- `explain` subcommand: `goperfcheck explain <CheckerName>` prints what a checker
+  looks for, a short bad/good code example, and the goperf.dev reference URL —
+  making the tool self-documenting at the terminal without needing the README.
+  Checker names are case-insensitive. Running `goperfcheck explain` with no
+  argument lists all available checker names with their one-line descriptions.
+  Respects `-no-color` and `NO_COLOR` for the severity label color.
+- `CheckerMeta` now carries three new exported fields: `Link` (goperf.dev URL),
+  `BadExample`, and `GoodExample` (code snippets used by `explain`). All 18
+  checkers are populated.
+
+---
+
 ## [0.2.0] — 2026-05-09
 
 ### Added
