@@ -61,6 +61,7 @@ func main() {
 	stdin := flag.Bool("stdin", false, "read Go source from stdin instead of a file or directory")
 	listCheckers := flag.Bool("list-checkers", false, "print all checkers with severity, group, and description, then exit")
 	auditSuppressions := flag.Bool("audit-suppressions", false, "report stale and expired //goperfcheck:ignore comments, then exit")
+	goVersion := flag.String("go-version", "", "Go version the project targets, e.g. 1.22 (default: auto-detect from go.mod)")
 	showVersion := flag.Bool("version", false, "print version and exit")
 
 	// Load .goperfcheck config before flag.Parse so CLI flags take precedence.
@@ -87,6 +88,7 @@ func main() {
 	symHint := "💡"
 	symBench := "📊"
 	symConf := "🔍"
+	symVer := "📦"
 	symSep := "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	if plain {
 		symOK = "[OK]"
@@ -95,6 +97,7 @@ func main() {
 		symHint = "hint:"
 		symBench = "bench:"
 		symConf = "fp?:"
+		symVer = "ver:"
 		symSep = "-------------------------------------------------"
 	}
 
@@ -149,6 +152,30 @@ func main() {
 	}
 
 	minSev := parseSeverity(*severity)
+
+	// --- Go version detection ---
+	// Determines which go.mod-based adjustments to apply (ApplyGoVersion).
+	var detectedGoVer checker.GoVersion
+	var goVerSource string
+	if *goVersion != "" {
+		if v, ok := checker.ParseGoVersion(*goVersion); ok {
+			detectedGoVer = v
+			goVerSource = "flag"
+		} else {
+			fmt.Fprintf(os.Stderr, "warning: invalid -go-version %q — expected X.Y or X.Y.Z; ignoring\n", *goVersion)
+		}
+	} else if !*stdin {
+		searchRoot := *dir
+		if *file != "" {
+			searchRoot = filepath.Dir(*file)
+		}
+		if abs, err := filepath.Abs(searchRoot); err == nil {
+			if v, ok := checker.ReadModGoVersion(abs); ok {
+				detectedGoVer = v
+				goVerSource = "go.mod"
+			}
+		}
+	}
 
 	allCheckers := checker.AllCheckers()
 
@@ -321,6 +348,9 @@ func main() {
 	// Deduplicate issues (can occur with nested loops)
 	allIssues = checker.DedupeIssues(allIssues)
 
+	// Apply Go version-aware adjustments (modifies suggestions, sets VersionNote).
+	allIssues = checker.ApplyGoVersion(allIssues, detectedGoVer)
+
 	// Sort by file, then line
 	sort.Slice(allIssues, func(i, j int) bool {
 		if allIssues[i].File != allIssues[j].File {
@@ -381,6 +411,7 @@ func main() {
 		default:
 			fmt.Printf("%s No performance issues found in %s\n", symOK, *dir)
 		}
+		printGoVersionLine(detectedGoVer, goVerSource, *goVersion, *stdin, plain)
 		return
 	}
 
@@ -418,6 +449,9 @@ func main() {
 			meta.FalsePositiveNote != "" {
 			fmt.Printf("   %s Low confidence: %s\n", symConf, meta.FalsePositiveNote)
 		}
+		if issue.VersionNote != "" {
+			fmt.Printf("   %s %s\n", symVer, issue.VersionNote)
+		}
 	}
 
 	var nErr, nWarn, nInfo int
@@ -437,6 +471,7 @@ func main() {
 		coloredCount(nErr, checker.SeverityError, colorEnabled),
 		coloredCount(nWarn, checker.SeverityWarning, colorEnabled),
 		coloredCount(nInfo, checker.SeverityInfo, colorEnabled))
+	printGoVersionLine(detectedGoVer, goVerSource, *goVersion, *stdin, plain)
 
 	// Exit with error code if any issues found
 	os.Exit(1)

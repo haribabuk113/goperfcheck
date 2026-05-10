@@ -38,6 +38,7 @@ goperfcheck -help                    # print all flags
 | `-cache` | `true` | Cache parse+check results in `.goperfcheck-cache/` |
 | `-stdin` | `false` | Read Go source from stdin |
 | `-no-color` | `false` | Disable ANSI color and emoji (also: `NO_COLOR` env var) |
+| `-go-version` | `""` | Go version the project targets, e.g. `1.22` (default: auto-detect from `go.mod`) |
 | `-list-checkers` | `false` | Print checker table and exit |
 | `-audit-suppressions` | `false` | Report stale and expired `//goperfcheck:ignore` comments, then exit |
 | `-version` | `false` | Print version and exit |
@@ -132,6 +133,62 @@ instead of Markdown. Upload to GitHub for inline PR annotations:
   with:
     sarif_file: results.sarif
 ```
+
+---
+
+## Go version awareness
+
+goperfcheck auto-detects the Go version your project targets by searching for
+`go.mod` starting from the scan root and walking up to the filesystem root.
+Once found, it uses the `go X.Y` directive to adjust advice for four
+version-sensitive checkers.
+
+```bash
+goperfcheck                        # auto-detects from go.mod
+goperfcheck -go-version 1.21       # override (useful in pipelines without go.mod)
+```
+
+When a finding's advice changes or no longer applies for the detected version, a
+`📦` line (`ver:` in plain mode) appears below the suggestion:
+
+```
+   [WARN] StackAlloc:42:5
+   ⚠  new(int) allocates on the heap — use var x int instead
+   💡 Use value semantics: var x T or x := T(0)
+   📊 1 alloc/op eliminated; ~24ns saved per call
+   📦 Go 1.22: escape analysis improvements mean the compiler may already
+      stack-allocate this. Verify with `go build -gcflags='-m' ./...` before
+      refactoring.
+```
+
+The detected version is printed at the end of every scan:
+```
+Go: 1.22 (go.mod)
+```
+
+If no `go.mod` is found and `-go-version` is not set, a tip is printed instead:
+```
+Tip: no go.mod found — use -go-version=X.Y for version-aware advice
+```
+
+### Version-sensitive checkers
+
+| Checker | Threshold | What changes |
+|---------|-----------|--------------|
+| **GoroutinePool** | ≥ 1.22 | Loop variables are per-iteration in Go 1.22+ — the classic closure capture correctness bug is gone. Finding is now a performance concern only. |
+| **StackAlloc** | ≥ 1.17 | Escape analysis improvements mean the compiler may already handle many of these patterns. Adds a verification command. |
+| **ZeroCopy** | < 1.20 | `bytes.Clone()` was added in Go 1.20. Replaces the suggestion with a compatible `make`+`copy` form. |
+| **AtomicMutex** | < 1.19 | `atomic.Int64`, `atomic.Bool`, `atomic.Uint64` (typed atomics) were added in Go 1.19. Rewrites the suggestion to use the function-based API (`atomic.AddInt64` etc.) that exists in older versions. |
+
+### `-go-version` flag
+
+```bash
+goperfcheck -go-version 1.21           # explicit version
+goperfcheck -go-version 1.18 -dir ./pkg  # per-directory override
+```
+
+Accepts `X.Y`, `X.Y.Z`, or `X.YrcN` (pre-release) — only major and minor are
+used. Takes precedence over any `go.mod` in the directory tree.
 
 ---
 

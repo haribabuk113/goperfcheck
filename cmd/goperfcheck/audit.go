@@ -9,6 +9,35 @@ import (
 	"github.com/haribabuk113/goperfcheck/checker"
 )
 
+// printGoVersionLine prints a one-line version note after a scan result.
+// When the version was detected it confirms what was used. When it is unknown
+// and the user did not set -go-version, it suggests using the flag so they
+// get version-aware advice.
+func printGoVersionLine(v checker.GoVersion, source, flagVal string, stdinMode, plain bool) {
+	if stdinMode {
+		// No go.mod search for stdin; only show if the user set -go-version.
+		if !v.Zero() && source == "flag" {
+			fmt.Printf("Go: %s (from -go-version flag)\n", v.String())
+		}
+		return
+	}
+	if v.Zero() {
+		if flagVal == "" {
+			if plain {
+				fmt.Println("Tip: no go.mod found -- use -go-version=X.Y for version-aware advice")
+			} else {
+				fmt.Println("Tip: no go.mod found — use -go-version=X.Y for version-aware advice")
+			}
+		}
+		return
+	}
+	sourceLabel := source
+	if source == "flag" {
+		sourceLabel = "-go-version flag"
+	}
+	fmt.Printf("Go: %s (%s)\n", v.String(), sourceLabel)
+}
+
 // printAuditReport prints the suppression audit results to stdout.
 // Returns true if any stale or expired suppressions were found (caller
 // should exit 1 in that case).

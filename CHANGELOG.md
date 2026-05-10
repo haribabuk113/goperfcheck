@@ -10,6 +10,27 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- **Go version awareness**: goperfcheck now reads the `go X.Y` directive from
+  `go.mod` (walking up from the scan root, same discovery as `.goperfcheck`
+  config) and adjusts advice for version-sensitive checkers. Use
+  `-go-version X.Y` to override — useful in pipelines where no `go.mod` is
+  present. When no version is detected and the flag is not set, a tip is printed
+  suggesting the flag. Detected version is printed at the end of every scan.
+
+  Four checkers are version-sensitive:
+
+  | Checker | Threshold | Adjustment |
+  |---------|-----------|------------|
+  | **GoroutinePool** | ≥ 1.22 | Go 1.22 per-iteration loop variables eliminate the classic closure capture correctness bug; adds a `📦` note clarifying the finding is now a performance concern only |
+  | **StackAlloc** | ≥ 1.17 | Escape analysis improvements mean the compiler may already stack-allocate the flagged patterns; adds a `📦` note with a verification command (`go build -gcflags='-m' ./...`) |
+  | **ZeroCopy** | < 1.20 | `bytes.Clone()` does not exist before Go 1.20; adds a `📦` note replacing the suggestion with `make([]byte, len(src)); copy(...)` |
+  | **AtomicMutex** | < 1.19 | `atomic.Int64`, `atomic.Bool`, `atomic.Uint64` (typed atomics) do not exist before Go 1.19; **rewrites the suggestion** from the typed-atomic form to the function-based API (`atomic.AddInt64` / `StoreInt64` / `LoadInt64`) — the previous suggestion was actively wrong on older projects |
+
+  New exported API: `checker.GoVersion`, `checker.ParseGoVersion`,
+  `checker.ReadModGoVersion`, `checker.ApplyGoVersion`. The `Issue` struct
+  gains a new `VersionNote string` field (JSON: `"version_note"`, `omitempty`)
+  populated by `ApplyGoVersion` when advice changes for the detected version.
+
 - **Checker confidence levels**: every checker now carries a `Confidence` field
   (`HIGH` / `MEDIUM` / `LOW`) and a `FalsePositiveNote` explaining the specific
   AST limitation that causes false positives. Because goperfcheck is AST-only
