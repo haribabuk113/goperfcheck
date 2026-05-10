@@ -86,6 +86,7 @@ func main() {
 	symWarn := "⚠ "
 	symHint := "💡"
 	symBench := "📊"
+	symConf := "🔍"
 	symSep := "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	if plain {
 		symOK = "[OK]"
@@ -93,6 +94,7 @@ func main() {
 		symWarn = "!"
 		symHint = "hint:"
 		symBench = "bench:"
+		symConf = "fp?:"
 		symSep = "-------------------------------------------------"
 	}
 
@@ -108,13 +110,18 @@ func main() {
 	}
 
 	if *listCheckers {
-		fmt.Printf("%-17s %-9s %-13s %s\n", "NAME", "SEVERITY", "GROUP", "DESCRIPTION")
-		fmt.Printf("%s %s %s %s\n",
+		fmt.Printf("%-17s %-9s %-8s %-13s %s\n", "NAME", "SEVERITY", "CONF", "GROUP", "DESCRIPTION")
+		fmt.Printf("%s %s %s %s %s\n",
 			strings.Repeat("-", 17), strings.Repeat("-", 9),
-			strings.Repeat("-", 13), strings.Repeat("-", 44))
+			strings.Repeat("-", 8), strings.Repeat("-", 13), strings.Repeat("-", 44))
 		for _, c := range checker.AllCheckers() {
 			meta := checker.Metadata[c.Name()]
-			fmt.Printf("%-17s %s %-13s %s\n", c.Name(), coloredSeverityPadded(meta.Severity, 8, colorEnabled), meta.Group, meta.Description)
+			fmt.Printf("%-17s %s %s %-13s %s\n",
+				c.Name(),
+				coloredSeverityPadded(meta.Severity, 8, colorEnabled),
+				coloredConfidencePadded(meta.Confidence, 8, colorEnabled),
+				meta.Group,
+				meta.Description)
 		}
 		return
 	}
@@ -406,6 +413,11 @@ func main() {
 		if issue.Benchmark != "" {
 			fmt.Printf("   %s %s\n", symBench, issue.Benchmark)
 		}
+		if meta, ok := checker.Metadata[issue.Checker]; ok &&
+			meta.Confidence == checker.ConfidenceLow &&
+			meta.FalsePositiveNote != "" {
+			fmt.Printf("   %s Low confidence: %s\n", symConf, meta.FalsePositiveNote)
+		}
 	}
 
 	var nErr, nWarn, nInfo int
@@ -473,10 +485,18 @@ func runExplain(args []string, colorEnabled bool) {
 	sep := "─────────────────────────────────────────────────"
 	fmt.Printf("Checker:     %s\n", canonicalName)
 	fmt.Printf("Severity:    %s\n", coloredSeverity(checker.Severity(meta.Severity), colorEnabled))
+	fmt.Printf("Confidence:  %s\n", coloredConfidencePadded(meta.Confidence, 0, colorEnabled))
 	fmt.Printf("Group:       %s\n", meta.Group)
 	fmt.Printf("Description: %s\n", meta.Description)
 	if meta.Link != "" {
 		fmt.Printf("Docs:        %s\n", meta.Link)
+	}
+	if meta.FalsePositiveNote != "" {
+		fmt.Printf("\n%s\n", sep)
+		fmt.Println("Limitations (AST-only analysis):")
+		for _, line := range strings.Split(meta.FalsePositiveNote, "\n") {
+			fmt.Printf("  %s\n", line)
+		}
 	}
 	if meta.BadExample != "" {
 		fmt.Printf("\n%s\n", sep)

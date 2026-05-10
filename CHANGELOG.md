@@ -10,6 +10,51 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- **Checker confidence levels**: every checker now carries a `Confidence` field
+  (`HIGH` / `MEDIUM` / `LOW`) and a `FalsePositiveNote` explaining the specific
+  AST limitation that causes false positives. Because goperfcheck is AST-only
+  with no type resolution, some findings fire on patterns that look wrong
+  syntactically but are correct in context — confidence makes this explicit
+  rather than hiding it in fine print.
+
+  | Confidence | Meaning |
+  |-----------|---------|
+  | HIGH | Structurally reliable; safe to act immediately |
+  | MEDIUM | Usually correct; review surrounding context first |
+  | LOW | Fires on legitimate code patterns; verify before acting |
+
+  - **AtomicMutex** and **InterfaceBoxing** are rated LOW. AtomicMutex cannot
+    determine whether a mutex also guards non-atomic state outside the struct —
+    following the suggestion when it does would introduce data races.
+    InterfaceBoxing cannot distinguish unavoidable boxing (`fmt.Fprintf`,
+    `json.Marshal`, variadic `...any`) from optimisable cases.
+  - Nine checkers are MEDIUM (pattern usually correct, edge cases documented).
+  - Eight checkers remain HIGH (structural guarantees are sufficient).
+
+  **How confidence is surfaced:**
+  - **`-list-checkers`** gains a `CONF` column (color-coded green/yellow/red on
+    terminals; plain text with `-no-color`).
+  - **`explain <CheckerName>`** shows a "Confidence" line and, for MEDIUM/LOW
+    checkers, a "Limitations (AST-only analysis)" section with the full note.
+  - **Terminal output** appends a `🔍` line (`fp?:` in plain mode) for every LOW
+    confidence finding, naming the specific limitation so the developer knows
+    exactly what to verify before making a change.
+  - `CheckerMeta.Confidence` and `CheckerMeta.FalsePositiveNote` are exported so
+    library consumers and editor integrations can surface the same information.
+
+- **False-positive test coverage**: three new/updated test functions pin the
+  behaviour of known false-positive scenarios so regressions are caught and the
+  limitations are visible in the test suite:
+  - `TestAtomicMutexFalsePositive_MutexGuardsMultipleFields` — fires on a struct
+    whose mutex could guard external state; documents the data-race risk
+  - `TestInterfaceBoxingFalsePositive_UnavoidableBoxing` — three sub-cases: a
+    fmt-style variadic wrapper, a json-marshaling helper, and an intentional
+    heterogeneous container; all fire, all are documented as correct false
+    positives
+  - `TestMemPreallocFalsePositive_LoopLocalSlice` — fires on a loop-local slice
+    inside a range loop alongside the outer accumulation slice; documents that
+    the checker cannot distinguish which slice is the actual problem
+
 - **Suppression expiry (`until:`)**: `//goperfcheck:ignore MemPrealloc until:2026-09-01`
   attaches a date-bound lifetime to any suppression comment. When the date passes
   the suppression automatically stops hiding the issue — the checker finding resurfaces

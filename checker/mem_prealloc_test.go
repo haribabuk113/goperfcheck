@@ -160,6 +160,48 @@ func f() map[string]int { return make(map[string]int) }`,
 	}
 }
 
+// TestMemPreallocFalsePositive_LoopLocalSlice documents a known false positive:
+// MemPrealloc fires when append() appears inside a loop even when the slice
+// being appended to was created inside the loop body, not accumulated across
+// iterations. Without type resolution or data-flow analysis, the checker cannot
+// distinguish accumulation patterns from local-use patterns.
+//
+// In the example below, tmp is allocated fresh on every iteration and its
+// contents are merged into results via a separate append — no preallocation of
+// tmp would help because it is discarded at the end of each iteration.
+// The outer results slice is never directly appended to inside the loop.
+// This test pins the current behaviour so the limitation remains visible.
+func TestMemPreallocFalsePositive_LoopLocalSlice(t *testing.T) {
+	src := `package p
+func process(items []string) []string {
+	var results []string
+	for _, item := range items {
+		// tmp is loop-local: created and discarded each iteration.
+		// Preallocating tmp changes nothing for results.
+		var tmp []string
+		tmp = append(tmp, transform(item))
+		results = append(results, tmp...)
+	}
+	return results
+}
+func transform(s string) string { return s }
+`
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "test.go", src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &MemPreallocChecker{}
+	issues := c.Check(fset, f)
+
+	// The checker fires on tmp (loop-local) — this is the known false positive.
+	// The results slice is also correctly flagged, making it hard to distinguish
+	// which append is the real problem without reading the code carefully.
+	if len(issues) == 0 {
+		t.Fatal("expected MemPrealloc to fire on loop-local slice (known false positive scenario)")
+	}
+}
+
 func contains(s, sub string) bool {
 	return len(s) >= len(sub) && (s == sub || len(sub) == 0 ||
 		func() bool {

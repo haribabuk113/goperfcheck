@@ -135,6 +135,49 @@ instead of Markdown. Upload to GitHub for inline PR annotations:
 
 ---
 
+## Checker confidence levels
+
+Because goperfcheck is AST-only with no type resolution, some checkers fire on
+patterns that look wrong in the syntax tree but are correct in context. Each
+checker carries a **confidence level** that tells you how often to expect a
+false positive:
+
+| Confidence | Meaning | When to act |
+|-----------|---------|-------------|
+| **HIGH** | Structurally reliable — the syntax alone is sufficient to conclude a problem | Safe to act immediately |
+| **MEDIUM** | Usually correct, known edge cases | Review the surrounding code first |
+| **LOW** | Fires on patterns that frequently appear in legitimate code | Verify manually before making any change |
+
+Confidence is visible in:
+- `-list-checkers` — CONF column (color-coded: green/yellow/red when output is a terminal)
+- `explain <CheckerName>` — "Confidence" line plus a "Limitations" section for MEDIUM and LOW checkers
+- **Terminal output** — LOW confidence findings include a `🔍` line describing the specific AST limitation so you know what to verify
+
+### Which checkers are LOW confidence and why
+
+**AtomicMutex** (LOW): Cannot determine whether the mutex guards non-atomic state
+outside the struct definition. The struct might have a companion mutex protecting
+a slice — converting to atomics in that case introduces a data race.
+
+**InterfaceBoxing** (LOW): Cannot distinguish unavoidable boxing (`fmt.Fprintf`,
+`json.Marshal`, variadic `...any` wrappers) from optimisable cases. Also fires on
+intentionally heterogeneous containers where `[]any` is the correct choice.
+
+### Example: LOW confidence finding in terminal output
+
+```
+📁 pkg/counter.go  (1 issue(s))
+   [INFO] AtomicMutex:12:2
+   ⚠  struct "Counter" uses sync.Mutex to protect only atomic-compatible scalar fields
+   💡 Replace sync.Mutex with atomic.Int64, atomic.Bool, or atomic.Uint64
+   📊 ~4× faster under 8-goroutine contention
+   🔍 Low confidence: Cannot see if this mutex also guards non-atomic state (slices,
+      maps, pointers) outside this struct. If it does, converting would introduce
+      data races. Run 'explain AtomicMutex' for details.
+```
+
+---
+
 ## explain subcommand
 
 `explain` is the fastest way to understand a finding without leaving the terminal.

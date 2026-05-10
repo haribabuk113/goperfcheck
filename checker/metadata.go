@@ -1,13 +1,45 @@
 package checker
 
+// Confidence describes how reliably a checker avoids false positives given
+// its AST-only analysis constraints. Because goperfcheck cannot resolve types
+// or follow variable identity across scopes, some patterns that look wrong in
+// the syntax tree are perfectly correct in context.
+type Confidence string
+
+const (
+	// ConfidenceHigh means the syntactic pattern is structurally sufficient to
+	// conclude a problem exists. False positives are rare in real codebases.
+	// The suggestion is generally safe to follow without further investigation.
+	ConfidenceHigh Confidence = "HIGH"
+
+	// ConfidenceMedium means the pattern is usually correct but has known edge
+	// cases where the AST alone is insufficient. Review the finding and the
+	// surrounding code before making changes.
+	ConfidenceMedium Confidence = "MEDIUM"
+
+	// ConfidenceLow means the checker fires on a syntactic pattern that
+	// frequently appears in correct, idiomatic code. Verify the finding
+	// manually — acting without understanding the context can introduce bugs.
+	ConfidenceLow Confidence = "LOW"
+)
+
 // CheckerMeta holds display information printed by -list-checkers and explain.
 type CheckerMeta struct {
-	Severity    string // primary severity level this checker reports
-	Group       string // theme group (memory | concurrency | io)
-	Description string // one-line description of what it catches
-	Link        string // goperf.dev reference URL
-	BadExample  string // short code snippet that triggers the checker
-	GoodExample string // preferred alternative
+	Severity    string     // primary severity level this checker reports
+	Group       string     // theme group (memory | concurrency | io)
+	Description string     // one-line description of what it catches
+	Link        string     // goperf.dev reference URL
+	BadExample  string     // short code snippet that triggers the checker
+	GoodExample string     // preferred alternative
+
+	// Confidence is how reliably this checker avoids false positives.
+	// HIGH = structurally reliable; MEDIUM = verify context; LOW = verify always.
+	Confidence Confidence
+
+	// FalsePositiveNote explains the specific AST limitation that can produce
+	// false positives. Empty for HIGH confidence checkers. Shown in explain
+	// output and inline in terminal output for LOW confidence findings.
+	FalsePositiveNote string
 }
 
 // Metadata maps each checker name to its display metadata.
@@ -25,6 +57,11 @@ var Metadata = map[string]CheckerMeta{
 			"for _, v := range items {\n" +
 			"    result = append(result, v)\n" +
 			"}",
+		Confidence: ConfidenceMedium,
+		FalsePositiveNote: "Cannot verify that the slice being appended to was declared outside " +
+			"the loop. May fire when the loop appends to a loop-local slice that feeds " +
+			"a separate accumulation step, where no reallocation pressure actually exists " +
+			"on the outer slice.",
 	},
 	"ObjectPool": {
 		Severity:    "WARN",
@@ -42,6 +79,11 @@ var Metadata = map[string]CheckerMeta{
 			"    process(buf)\n" +
 			"    pool.Put(buf)\n" +
 			"}",
+		Confidence: ConfidenceMedium,
+		FalsePositiveNote: "Identifies allocation candidates by type-name heuristic " +
+			"(bytes.Buffer, strings.Builder, etc.). Cannot confirm the object's actual " +
+			"allocation rate, whether the loop runs frequently enough to matter, or " +
+			"whether concurrent access would make pooling unsafe.",
 	},
 	"StructAlign": {
 		Severity:    "WARN",
@@ -63,6 +105,7 @@ var Metadata = map[string]CheckerMeta{
 			"// For exported types: grep for positional literals first\n" +
 			"// T{val1, val2, val3} — these break if fields are reordered\n" +
 			"// T{a: val1, b: val2} — named fields are safe to reorder",
+		Confidence: ConfidenceHigh,
 	},
 	"InterfaceBoxing": {
 		Severity:    "INFO",
@@ -74,6 +117,10 @@ var Metadata = map[string]CheckerMeta{
 			"}",
 		GoodExample: "func logValues(args []string) {}\n" +
 			"// or use a typed variadic: func log(format string, args ...any)",
+		Confidence: ConfidenceLow,
+		FalsePositiveNote: "Cannot distinguish unavoidable boxing (fmt.Fprintf, " +
+			"json.Marshal, variadic ...any wrappers) from optimisable cases. " +
+			"Also fires on intentional heterogeneous containers. Run 'explain InterfaceBoxing' for details.",
 	},
 	"ZeroCopy": {
 		Severity:    "INFO",
@@ -83,6 +130,7 @@ var Metadata = map[string]CheckerMeta{
 		BadExample:  "dst := append([]byte{}, src...) // allocates + copies",
 		GoodExample: "dst := bytes.Clone(src) // Go 1.20+, same semantics\n" +
 			"// or: use src directly if mutation is not needed",
+		Confidence: ConfidenceHigh,
 	},
 	"GoroutinePool": {
 		Severity:    "WARN",
@@ -100,6 +148,7 @@ var Metadata = map[string]CheckerMeta{
 			"        process(v)\n" +
 			"    }(item)\n" +
 			"}",
+		Confidence: ConfidenceHigh,
 	},
 	"ContextMisuse": {
 		Severity:    "ERROR",
@@ -113,6 +162,7 @@ var Metadata = map[string]CheckerMeta{
 			"    // pass ctx as a parameter to each method that needs it\n" +
 			"    return s.db.Query(ctx, query)\n" +
 			"}",
+		Confidence: ConfidenceHigh,
 	},
 	"BufferedIO": {
 		Severity:    "WARN",
@@ -127,6 +177,10 @@ var Metadata = map[string]CheckerMeta{
 			"    w.WriteString(line)\n" +
 			"}\n" +
 			"w.Flush()",
+		Confidence: ConfidenceMedium,
+		FalsePositiveNote: "Cannot determine whether the io.Writer argument is already " +
+			"wrapped in a bufio.Writer at the call site, or whether write frequency is " +
+			"low enough that the syscall overhead is immaterial.",
 	},
 	"AtomicMutex": {
 		Severity:    "INFO",
@@ -140,6 +194,10 @@ var Metadata = map[string]CheckerMeta{
 			"mu.Unlock()",
 		GoodExample: "var counter atomic.Int64\n" +
 			"counter.Add(1)",
+		Confidence: ConfidenceLow,
+		FalsePositiveNote: "Cannot see if this mutex also guards non-atomic state " +
+			"(slices, maps, pointers) outside this struct. If it does, converting to " +
+			"atomics would introduce data races. Run 'explain AtomicMutex' for details.",
 	},
 	"LazyInit": {
 		Severity:    "INFO",
@@ -149,6 +207,11 @@ var Metadata = map[string]CheckerMeta{
 		BadExample:  "var cache = buildExpensiveCache() // runs at program start, always",
 		GoodExample: "var cache = sync.OnceValue(buildExpensiveCache)\n" +
 			"// initialized on first use, skipped entirely if never called",
+		Confidence: ConfidenceMedium,
+		FalsePositiveNote: "Cannot determine whether the initialization is genuinely " +
+			"expensive or conditionally executed. Fires on small precomputed lookup " +
+			"tables and constant maps that are intentionally initialised at startup with " +
+			"negligible cost.",
 	},
 	"StackAlloc": {
 		Severity:    "INFO",
@@ -160,6 +223,11 @@ var Metadata = map[string]CheckerMeta{
 			"use(p)",
 		GoodExample: "v := 42 // lives on the stack unless it escapes\n" +
 			"use(&v)",
+		Confidence: ConfidenceMedium,
+		FalsePositiveNote: "Go's compiler escape analysis already stack-allocates values " +
+			"that do not escape and may already optimise many patterns this checker flags. " +
+			"Whether a value must be heap-allocated depends on escape analysis that " +
+			"requires full type information — not available to AST-only analysis.",
 	},
 	"Batching": {
 		Severity:    "WARN",
@@ -170,6 +238,10 @@ var Metadata = map[string]CheckerMeta{
 			"    row, _ := db.QueryRow(ctx, \"SELECT * FROM t WHERE id=?\", id) // N round-trips\n" +
 			"}",
 		GoodExample: "rows, _ := db.Query(ctx, \"SELECT * FROM t WHERE id IN (?)\", ids) // 1 round-trip",
+		Confidence: ConfidenceMedium,
+		FalsePositiveNote: "Cannot determine whether the in-loop call is already mediated " +
+			"by a batch-aware client, whether the API supports batching, or whether the " +
+			"loop runs infrequently enough that per-call overhead is acceptable.",
 	},
 	"TimeNowLoop": {
 		Severity:    "INFO",
@@ -184,6 +256,7 @@ var Metadata = map[string]CheckerMeta{
 			"for _, item := range items {\n" +
 			"    process(item, now)\n" +
 			"}",
+		Confidence: ConfidenceHigh,
 	},
 	"WaitGroupMisuse": {
 		Severity:    "ERROR",
@@ -206,6 +279,7 @@ var Metadata = map[string]CheckerMeta{
 			"    }()\n" +
 			"}\n" +
 			"wg.Wait()",
+		Confidence: ConfidenceHigh,
 	},
 	"DeferInLoop": {
 		Severity:    "WARN",
@@ -221,6 +295,7 @@ var Metadata = map[string]CheckerMeta{
 			"        process(f)\n" +
 			"    }()\n" +
 			"}",
+		Confidence: ConfidenceHigh,
 	},
 	"StringConcatLoop": {
 		Severity:    "WARN",
@@ -236,6 +311,7 @@ var Metadata = map[string]CheckerMeta{
 			"    sb.WriteString(w)\n" +
 			"}\n" +
 			"s := sb.String()",
+		Confidence: ConfidenceHigh,
 	},
 	"RegexpCompile": {
 		Severity:    "WARN",
@@ -250,6 +326,11 @@ var Metadata = map[string]CheckerMeta{
 			"func valid(s string) bool {\n" +
 			"    return digitRe.MatchString(s)\n" +
 			"}",
+		Confidence: ConfidenceMedium,
+		FalsePositiveNote: "Cannot determine whether the pattern string is a literal " +
+			"constant or a dynamic runtime value. Fires on regexp.Compile(dynamicPattern) " +
+			"where the pattern changes per call and cannot be pre-compiled at package " +
+			"level.",
 	},
 	"SyncMapMisuse": {
 		Severity:    "WARN",
@@ -267,6 +348,11 @@ var Metadata = map[string]CheckerMeta{
 			"    entries map[string]Entry\n" +
 			"}\n" +
 			"// sync.Map is correct only when keys are written once then read many times",
+		Confidence: ConfidenceMedium,
+		FalsePositiveNote: "Cannot infer the actual read/write ratio or whether the key " +
+			"set is append-only. sync.Map is legitimately faster for append-only caches " +
+			"and goroutine-per-key patterns; the checker cannot distinguish these valid " +
+			"use cases from misuse.",
 	},
 	"HTTPClientReuse": {
 		Severity:    "WARN",
@@ -281,5 +367,6 @@ var Metadata = map[string]CheckerMeta{
 			"func fetch(url string) (*http.Response, error) {\n" +
 			"    return httpClient.Get(url) // reuses idle connections\n" +
 			"}",
+		Confidence: ConfidenceHigh,
 	},
 }

@@ -9,8 +9,9 @@ import (
 
 const (
 	ansiReset  = "\033[0m"
-	ansiRed    = "\033[1;31m" // bold red   — ERROR
-	ansiYellow = "\033[1;33m" // bold yellow — WARN
+	ansiRed    = "\033[1;31m" // bold red   — ERROR / LOW confidence
+	ansiYellow = "\033[1;33m" // bold yellow — WARN / MEDIUM confidence
+	ansiGreen  = "\033[1;32m" // bold green  — HIGH confidence
 	ansiDim    = "\033[2m"    // dim         — INFO
 )
 
@@ -70,6 +71,30 @@ func coloredSeverityPadded(sev string, totalWidth int, color bool) string {
 		code = ansiDim
 	}
 	return code + sev + ansiReset + spaces
+}
+
+// coloredConfidencePadded returns a padded confidence string with ANSI color
+// when color is enabled. totalWidth is the visible column width.
+func coloredConfidencePadded(conf checker.Confidence, totalWidth int, color bool) string {
+	s := string(conf)
+	padding := totalWidth - len(s)
+	if padding < 0 {
+		padding = 0
+	}
+	spaces := fmt.Sprintf("%-*s", padding, "")
+	if !color {
+		return s + spaces
+	}
+	var code string
+	switch conf {
+	case checker.ConfidenceHigh:
+		code = ansiGreen
+	case checker.ConfidenceMedium:
+		code = ansiYellow
+	default: // LOW
+		code = ansiRed
+	}
+	return code + s + ansiReset + spaces
 }
 
 // coloredCount formats "N SEVERITY" and applies color when color is enabled
