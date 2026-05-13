@@ -163,7 +163,7 @@ func writeMarkdownReport(path string, issues []checker.Issue, dir string) (retEr
 			w.printf("**`%s:%d`** %s `[%s]`  \n", rel, iss.Line, issueEmoji(iss.Severity), iss.Severity)
 			w.printf("⚠ %s  \n", iss.Message)
 			if iss.Suggestion != "" {
-				w.printf("💡 %s\n", iss.Suggestion)
+				w.printf("💡 %s  \n", iss.Suggestion)
 			}
 			if iss.Benchmark != "" {
 				w.printf("📊 %s\n", iss.Benchmark)

@@ -9,6 +9,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+- **Markdown report benchmark on new line**: in the `-output report.md` format,
+  the `📊 <benchmark>` line was rendering on the same line as `💡 <suggestion>`
+  because the suggestion line lacked the two trailing spaces required for a
+  Markdown hard line break. Added `  \n` (two spaces + newline) after the
+  suggestion so the benchmark datum always appears on its own line in rendered
+  Markdown.
+
 ### Added
 - **Go version awareness**: goperfcheck now reads the `go X.Y` directive from
   `go.mod` (walking up from the scan root, same discovery as `.goperfcheck`
