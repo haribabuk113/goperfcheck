@@ -71,6 +71,16 @@ func main() {
 		os.Exit(2)
 	}
 	for k, v := range cfg {
+		// Paths from the config file must be relative and must not escape the
+		// project root via "..". CLI flags are not restricted — the user
+		// controls their own shell. This prevents a malicious .goperfcheck file
+		// in a checked-out repo from writing reports to arbitrary system paths.
+		if (k == "output" || k == "dir") && v != "" {
+			if filepath.IsAbs(v) || strings.Contains(filepath.Clean(v), "..") {
+				fmt.Fprintf(os.Stderr, "error: %s: %q must be a relative path within the project, got %q\n", cfgPath, k, v)
+				os.Exit(2)
+			}
+		}
 		if setErr := flag.Set(k, v); setErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: %s: unknown or invalid setting %q = %q\n", cfgPath, k, v)
 		}
@@ -317,6 +327,9 @@ func main() {
 		numW := *workers
 		if numW < 1 {
 			numW = 1
+		}
+		if numW > 512 {
+			numW = 512
 		}
 		// Skip generated files for directory/git-staged scans but not for
 		// explicit -file (user intent takes precedence).

@@ -37,6 +37,16 @@ func applyFixes(issues []checker.Issue) (int, error) {
 // fixFile applies all fixable issues in a single file, writes the result,
 // and returns the number of edits applied.
 func fixFile(path string, issues []checker.Issue) (int, error) {
+	// Refuse to follow symlinks: a symlink to a file outside the scan root
+	// would cause -fix to overwrite an unrelated file.
+	fi, err := os.Lstat(path)
+	if err != nil {
+		return 0, err
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		return 0, fmt.Errorf("refusing to fix symlink: %s", path)
+	}
+
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return 0, err

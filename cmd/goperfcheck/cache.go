@@ -72,7 +72,7 @@ func readCacheEntry(dir, name string) ([]checker.Issue, bool) {
 // writeCacheEntry atomically writes issues to dir/name via a temp-file rename.
 // Errors are silently ignored — cache misses are always safe.
 func writeCacheEntry(dir, name string, issues []checker.Issue) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return
 	}
 	if issues == nil {
@@ -83,7 +83,7 @@ func writeCacheEntry(dir, name string, issues []checker.Issue) {
 		return
 	}
 	tmp := filepath.Join(dir, name+".tmp")
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return
 	}
 	_ = os.Rename(tmp, filepath.Join(dir, name))
