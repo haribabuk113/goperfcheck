@@ -54,25 +54,104 @@ func (c *MemPreallocChecker) Check(fset *token.FileSet, file *ast.File) []Issue 
 // checkAppendInLoops walks every for/range loop in root and reports append()
 // calls found directly inside that loop body (not in nested loops).
 // The capacity hint is derived from the loop structure itself.
+// Variables already declared with make([]T, _, cap) before the loop are skipped
+// so that a second run after -fix does not re-flag already-fixed code.
 func (c *MemPreallocChecker) checkAppendInLoops(fset *token.FileSet, root ast.Node) []Issue {
+	prealloc := collectPreallocatedSlices(root)
 	var issues []Issue
 	ast.Inspect(root, func(n ast.Node) bool {
 		switch loop := n.(type) {
 		case *ast.RangeStmt:
 			hint := rangeExprHint(loop.X)
-			issues = append(issues, c.appendIssuesInBody(fset, loop.Body, hint)...)
+			issues = append(issues, c.appendIssuesInBody(fset, loop.Body, hint, prealloc, loop.Pos())...)
 		case *ast.ForStmt:
 			hint := forLoopCapHint(loop)
-			issues = append(issues, c.appendIssuesInBody(fset, loop.Body, hint)...)
+			issues = append(issues, c.appendIssuesInBody(fset, loop.Body, hint, prealloc, loop.Pos())...)
 		}
 		return true
 	})
 	return issues
 }
 
+// collectPreallocatedSlices scans root for short variable declarations of the
+// form x := make([]T, len, cap) (3-arg make with a slice type). It returns a
+// map from variable name to the source positions of all such declarations so
+// appendIssuesInBody can skip append() calls on already-preallocated slices.
+func collectPreallocatedSlices(root ast.Node) map[string][]token.Pos {
+	result := make(map[string][]token.Pos)
+	ast.Inspect(root, func(n ast.Node) bool {
+		switch s := n.(type) {
+		case *ast.AssignStmt:
+			if s.Tok != token.DEFINE {
+				return true
+			}
+			for j, rhs := range s.Rhs {
+				if !isSliceMakeWithCap(rhs) {
+					continue
+				}
+				if j < len(s.Lhs) {
+					if id, ok := s.Lhs[j].(*ast.Ident); ok {
+						result[id.Name] = append(result[id.Name], s.Pos())
+					}
+				}
+			}
+		case *ast.DeclStmt:
+			gen, ok := s.Decl.(*ast.GenDecl)
+			if !ok || gen.Tok != token.VAR {
+				return true
+			}
+			for _, spec := range gen.Specs {
+				vs, ok := spec.(*ast.ValueSpec)
+				if !ok {
+					continue
+				}
+				for j, val := range vs.Values {
+					if !isSliceMakeWithCap(val) {
+						continue
+					}
+					if j < len(vs.Names) {
+						result[vs.Names[j].Name] = append(result[vs.Names[j].Name], s.Pos())
+					}
+				}
+			}
+		}
+		return true
+	})
+	return result
+}
+
+// isSliceMakeWithCap reports whether expr is make([]T, len, cap) — a 3-argument
+// make call whose first argument is an unbounded slice type. This is the pattern
+// that -fix generates and that the checker must not re-flag on subsequent runs.
+func isSliceMakeWithCap(expr ast.Expr) bool {
+	call, ok := expr.(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+	id, ok := call.Fun.(*ast.Ident)
+	if !ok || id.Name != "make" || len(call.Args) < 3 {
+		return false
+	}
+	arr, ok := call.Args[0].(*ast.ArrayType)
+	return ok && arr.Len == nil // slice type (not fixed-length array)
+}
+
+// isPreallocatedBefore reports whether varName has a make([]T, _, cap)
+// declaration at any source position before loopPos.
+func isPreallocatedBefore(prealloc map[string][]token.Pos, varName string, loopPos token.Pos) bool {
+	for _, pos := range prealloc[varName] {
+		if pos < loopPos {
+			return true
+		}
+	}
+	return false
+}
+
 // appendIssuesInBody finds append() calls directly in body, stopping at nested
 // loops so each append is attributed to its innermost enclosing loop.
-func (c *MemPreallocChecker) appendIssuesInBody(fset *token.FileSet, body *ast.BlockStmt, hint string) []Issue {
+// prealloc and loopPos are used to suppress issues for variables that were
+// already declared with make([]T, _, cap) before this loop — i.e. already fixed.
+func (c *MemPreallocChecker) appendIssuesInBody(fset *token.FileSet, body *ast.BlockStmt, hint string, prealloc map[string][]token.Pos, loopPos token.Pos) []Issue {
 	var issues []Issue
 	if body == nil {
 		return nil
@@ -99,6 +178,9 @@ func (c *MemPreallocChecker) appendIssuesInBody(fset *token.FileSet, body *ast.B
 		var fixHint *FixHint
 		if len(call.Args) >= 1 {
 			if id, ok := call.Args[0].(*ast.Ident); ok && id.Name != "_" && id.Name != "nil" {
+				if isPreallocatedBefore(prealloc, id.Name, loopPos) {
+					return true // already preallocated — skip
+				}
 				fixHint = &FixHint{Kind: "slice_cap", VarName: id.Name, Cap: hint}
 			}
 		}

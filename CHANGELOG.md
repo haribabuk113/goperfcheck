@@ -9,6 +9,38 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+- **`MemPrealloc` no longer re-flags issues that were already fixed by `-fix`**:
+  previously, running `goperfcheck -fix` rewrote `var out []string` to
+  `out := make([]string, 0, len(items))`, but a subsequent `goperfcheck` run
+  reported the same issue again. The checker flagged `append()` inside a loop
+  unconditionally — it did not check whether the accumulation variable was
+  already pre-allocated.
+
+  The checker now precomputes all variables declared with `make([]T, len, cap)`
+  (3-argument make with a slice type) anywhere in the file. When processing an
+  `append(x, ...)` call inside a loop, it checks whether `x` was declared with
+  a capacity hint at any source position before the loop starts. If so, the issue
+  is suppressed — the code is already correct and no fix is needed.
+
+  Behaviour summary:
+  ```go
+  // Before fix — flagged correctly:
+  var out []string
+  for _, v := range items { out = append(out, v) }
+
+  // After -fix — NOT flagged (already preallocated):
+  out := make([]string, 0, len(items))
+  for _, v := range items { out = append(out, v) }
+
+  // make([]T, 0) with zero cap — still flagged (cap=0 is same as var decl):
+  out := make([]string, 0)
+  for _, v := range items { out = append(out, v) }
+  ```
+
+  Cross-scope declarations (variable declared in an outer block before the
+  function's loop) are also handled correctly.
+
 ### Added
 - **Clickable file links in terminal output**: every issue line now shows
   `rel/path/to/file.go:line:col` as the file location, placed between the

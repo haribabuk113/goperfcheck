@@ -160,6 +160,117 @@ func f() map[string]int { return make(map[string]int) }`,
 	}
 }
 
+// TestMemPreallocNoReFlagAfterFix verifies that once a slice is declared with
+// make([]T, 0, cap) before a loop, the checker does not re-report the append
+// inside the loop. This is the key correctness property: running -fix and then
+// re-running the checker must produce no issue for the fixed code.
+func TestMemPreallocNoReFlagAfterFix(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+	}{
+		{
+			name: "range loop: slice preallocated with make([]T,0,cap) before loop",
+			src: `package p
+func f(items []string) []string {
+	out := make([]string, 0, len(items))
+	for _, v := range items {
+		out = append(out, v)
+	}
+	return out
+}`,
+		},
+		{
+			name: "c-style for loop: slice preallocated before loop",
+			src: `package p
+func f(n int) []int {
+	out := make([]int, 0, n)
+	for i := 0; i < n; i++ {
+		out = append(out, i)
+	}
+	return out
+}`,
+		},
+		{
+			name: "nested loops: outer var preallocated, inner var not — only inner flagged",
+			src: `package p
+func f(items [][]string) []string {
+	out := make([]string, 0, len(items))
+	for _, group := range items {
+		for _, v := range group {
+			out = append(out, v)
+		}
+	}
+	return out
+}`,
+		},
+		{
+			name: "var form with make and cap: also suppressed",
+			src: `package p
+func f(items []string) []string {
+	var out = make([]string, 0, len(items))
+	for _, v := range items {
+		out = append(out, v)
+	}
+	return out
+}`,
+		},
+	}
+
+	c := &MemPreallocChecker{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			f, err := parser.ParseFile(fset, "test.go", tt.src, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			issues := c.Check(fset, f)
+			// Filter to only MemPrealloc slice issues (not map issues).
+			var sliceIssues []Issue
+			for _, iss := range issues {
+				if iss.Fix != nil && iss.Fix.Kind == "slice_cap" {
+					sliceIssues = append(sliceIssues, iss)
+				}
+			}
+			if len(sliceIssues) != 0 {
+				t.Errorf("expected 0 slice issues (preallocated), got %d:", len(sliceIssues))
+				for _, iss := range sliceIssues {
+					t.Logf("  %s", iss.Message)
+				}
+			}
+		})
+	}
+}
+
+func TestMemPreallocMakeWithoutCapStillFlags(t *testing.T) {
+	// make([]T, 0) has zero capacity — same as var decl — must still be flagged.
+	src := `package p
+func f(items []string) []string {
+	out := make([]string, 0)
+	for _, v := range items {
+		out = append(out, v)
+	}
+	return out
+}`
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "test.go", src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &MemPreallocChecker{}
+	issues := c.Check(fset, file)
+	var sliceIssues []Issue
+	for _, iss := range issues {
+		if iss.Fix != nil && iss.Fix.Kind == "slice_cap" {
+			sliceIssues = append(sliceIssues, iss)
+		}
+	}
+	if len(sliceIssues) == 0 {
+		t.Error("make([]T, 0) before loop (cap=0) should still be flagged")
+	}
+}
+
 // TestMemPreallocFalsePositive_LoopLocalSlice documents a known false positive:
 // MemPrealloc fires when append() appears inside a loop even when the slice
 // being appended to was created inside the loop body, not accumulated across
