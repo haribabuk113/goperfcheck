@@ -137,3 +137,91 @@ func TestNoArgsRunsWithoutError(t *testing.T) {
 		t.Errorf("unexpected error running with no .go files: %v", err)
 	}
 }
+
+// goFile is a minimal Go source with one known performance issue (append in a
+// range loop without prealloc) so the scanner always has something to do.
+const goFile = `package p
+
+func collect(items []string) []string {
+	var out []string
+	for _, v := range items {
+		out = append(out, v)
+	}
+	return out
+}
+`
+
+func tempDirWithGoFile(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "example.go"), []byte(goFile), 0o644); err != nil {
+		t.Fatalf("write test file: %v", err)
+	}
+	return dir
+}
+
+func TestCacheSpaceFalseSkipsCacheDirectory(t *testing.T) {
+	// "-cache false" (space-separated) must disable the cache, not silently
+	// ignore "false" as a positional argument.
+	bin := buildBinary(t)
+	dir := tempDirWithGoFile(t)
+
+	cmd := exec.Command(bin, "-cache", "false", "-dir", dir)
+	cmd.Run() //nolint — exit code 1 is expected (issues found)
+
+	cacheDir := filepath.Join(dir, ".goperfcheck-cache")
+	if _, err := os.Stat(cacheDir); err == nil {
+		t.Errorf("-cache false still created cache directory at %s", cacheDir)
+	}
+}
+
+func TestCacheEqualsFalseSkipsCacheDirectory(t *testing.T) {
+	bin := buildBinary(t)
+	dir := tempDirWithGoFile(t)
+
+	cmd := exec.Command(bin, "-cache=false", "-dir", dir)
+	cmd.Run() //nolint — exit code 1 is expected (issues found)
+
+	cacheDir := filepath.Join(dir, ".goperfcheck-cache")
+	if _, err := os.Stat(cacheDir); err == nil {
+		t.Errorf("-cache=false still created cache directory at %s", cacheDir)
+	}
+}
+
+func TestCacheEnabledByDefault(t *testing.T) {
+	bin := buildBinary(t)
+	dir := tempDirWithGoFile(t)
+
+	cmd := exec.Command(bin, "-dir", dir)
+	cmd.Run() //nolint — exit code 1 is expected (issues found)
+
+	cacheDir := filepath.Join(dir, ".goperfcheck-cache")
+	if _, err := os.Stat(cacheDir); err != nil {
+		t.Errorf("expected cache directory to be created by default, but it was not: %v", err)
+	}
+}
+
+func TestCacheFalseProducesSameResultsAsDefault(t *testing.T) {
+	bin := buildBinary(t)
+
+	// Both forms of disabling the cache must produce the same findings as the
+	// default (cache-enabled) run.
+	dir1 := tempDirWithGoFile(t)
+	dir2 := tempDirWithGoFile(t)
+	dir3 := tempDirWithGoFile(t)
+
+	out1, _ := exec.Command(bin, "-dir", dir1, "-format", "json").Output()
+	out2, _ := exec.Command(bin, "-cache", "false", "-dir", dir2, "-format", "json").Output()
+	out3, _ := exec.Command(bin, "-cache=false", "-dir", dir3, "-format", "json").Output()
+
+	norm1 := strings.ReplaceAll(string(out1), dir1, "<DIR>")
+	norm2 := strings.ReplaceAll(string(out2), dir2, "<DIR>")
+	norm3 := strings.ReplaceAll(string(out3), dir3, "<DIR>")
+
+	if norm1 != norm2 {
+		t.Errorf("-cache false produced different output than default:\ndefault:\n%s\n-cache false:\n%s", norm1, norm2)
+	}
+	if norm1 != norm3 {
+		t.Errorf("-cache=false produced different output than default:\ndefault:\n%s\n-cache=false:\n%s", norm1, norm3)
+	}
+}

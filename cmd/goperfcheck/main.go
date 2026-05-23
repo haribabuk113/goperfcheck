@@ -58,7 +58,7 @@ func main() {
 	workers := flag.Int("workers", defaultWorkers(), "number of parallel workers for file scanning")
 	fix := flag.Bool("fix", false, "auto-apply fixable suggestions in place (modifies source files)")
 	noColor := flag.Bool("no-color", false, "disable emoji and Unicode box-drawing in output (also respects NO_COLOR env var)")
-	cache := flag.Bool("cache", true, "cache parse+check results in .goperfcheck-cache/ (keyed by file hash); near-instant re-runs on unchanged files")
+	cache := flag.Bool("cache", true, "cache parse+check results in .goperfcheck-cache/ (keyed by file hash); near-instant re-runs on unchanged files; disable with -cache=false or -cache false")
 	stdin := flag.Bool("stdin", false, "read Go source from stdin instead of a file or directory")
 	listCheckers := flag.Bool("list-checkers", false, "print all checkers with severity, group, and description, then exit")
 	auditSuppressions := flag.Bool("audit-suppressions", false, "report stale and expired //goperfcheck:ignore comments, then exit")
@@ -87,7 +87,21 @@ func main() {
 		}
 	}
 
-	flag.Parse()
+	// Normalize "-flag false" → "-flag=false" for all boolean flags before
+	// flag.Parse sees them. Go's flag package treats boolean flags specially:
+	// "-flag value" does not assign value to flag; instead flag is set to true
+	// and value becomes a positional argument. Normalizing first lets users
+	// write "-cache false" (space-separated) as naturally as "-cache=false".
+	var boolFlagNames []string
+	flag.VisitAll(func(f *flag.Flag) {
+		type boolFlagger interface{ IsBoolFlag() bool }
+		if bf, ok := f.Value.(boolFlagger); ok && bf.IsBoolFlag() {
+			boolFlagNames = append(boolFlagNames, f.Name)
+		}
+	})
+	if err := flag.CommandLine.Parse(normalizeSpacedBoolFlags(os.Args[1:], boolFlagNames)); err != nil {
+		os.Exit(2)
+	}
 
 	_, noColorEnv := os.LookupEnv("NO_COLOR")
 	plain := *noColor || noColorEnv
@@ -613,6 +627,49 @@ func runExplain(args []string, colorEnabled bool) {
 		}
 	}
 	fmt.Printf("\n%s\n", sep)
+}
+
+// normalizeSpacedBoolFlags rewrites "-flag false" and "--flag false" to
+// "-flag=false" (and equivalently for "true", "1", "0") for every flag name in
+// boolFlagNames, before flag.Parse processes them.
+//
+// Go's flag package treats boolean flags specially: "-flag value" sets the flag
+// to true and leaves "value" as a positional argument, because booleans are
+// allowed without an explicit value ("-flag" alone means true). This helper
+// bridges the gap so users can write either form interchangeably.
+func normalizeSpacedBoolFlags(args []string, boolFlagNames []string) []string {
+	known := make(map[string]bool, len(boolFlagNames))
+	for _, n := range boolFlagNames {
+		known[n] = true
+	}
+
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		tok := args[i]
+		if !strings.HasPrefix(tok, "-") {
+			out = append(out, tok)
+			continue
+		}
+		// Strip one or two leading dashes to get the bare flag name.
+		name := strings.TrimLeft(tok, "-")
+		// Already has an inline value (-flag=value): pass through unchanged.
+		if strings.ContainsRune(name, '=') {
+			out = append(out, tok)
+			continue
+		}
+		// If this is a known bool flag and the very next token is a bare boolean
+		// literal, merge them with "=" so the flag package accepts the pair.
+		if known[name] && i+1 < len(args) {
+			switch strings.ToLower(args[i+1]) {
+			case "true", "false", "1", "0":
+				out = append(out, tok+"="+args[i+1])
+				i++ // consume the value token
+				continue
+			}
+		}
+		out = append(out, tok)
+	}
+	return out
 }
 
 func parseSeverity(s string) checker.Severity {

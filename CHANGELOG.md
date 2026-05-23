@@ -9,6 +9,28 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+- **`-cache false` now works as expected**: previously, `-cache false`
+  (space-separated) silently left the cache enabled and treated `false` as a
+  positional argument — a footgun caused by how Go's `flag` package handles
+  boolean flags (`IsBoolFlag() == true` means the flag may appear without a
+  value, so the parser does not consume the next token as its value).
+
+  A pre-parse normalization step (`normalizeSpacedBoolFlags`) now rewrites
+  `-flag value` → `-flag=value` for every registered boolean flag whenever
+  `value` is a bare boolean literal (`true`, `false`, `1`, `0`). Both forms
+  are now equivalent:
+
+  ```
+  goperfcheck -cache false     # ✓ now works (space-separated)
+  goperfcheck -cache=false     # ✓ always worked (equals form)
+  ```
+
+  The fix is generic and covers all boolean flags (`-skip-vendor`,
+  `-skip-tests`, `-skip-generated`, `-git-staged`, `-git-diff`, etc.) —
+  any bool flag with a default of `true` that a user might want to negate.
+  Flag defaults and all other behaviour are unchanged.
+
 ### Added
 - **`-git-diff` flag — diff-aware scanning**: `goperfcheck -git-diff` checks only
   the lines that were added or modified compared to HEAD. It combines staged and
