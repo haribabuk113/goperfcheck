@@ -52,6 +52,7 @@ func main() {
 	exclude := flag.String("exclude", "", "comma-separated list of exclusion patterns: directory names end with / (e.g. mocks/), file globs do not (e.g. *_gen.go,*.pb.go)")
 	severity := flag.String("severity", "INFO", "minimum severity to report: INFO | WARN | ERROR")
 	gitStaged := flag.Bool("git-staged", false, "only check Go files staged for the next git commit")
+	gitDiff := flag.Bool("git-diff", false, "check only lines added or modified compared to HEAD (covers staged + unstaged changes)")
 	output := flag.String("output", "", "write report to a file: .md for Markdown, .sarif for SARIF 2.1.0 (GitHub Code Scanning)")
 	format := flag.String("format", "text", "output format: text | json")
 	workers := flag.Int("workers", defaultWorkers(), "number of parallel workers for file scanning")
@@ -162,6 +163,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	if *gitDiff && *gitStaged {
+		fmt.Fprintf(os.Stderr, "error: -git-diff and -git-staged cannot be used together\n")
+		os.Exit(1)
+	}
+	if *gitDiff && *stdin {
+		fmt.Fprintf(os.Stderr, "error: -git-diff and -stdin cannot be used together\n")
+		os.Exit(1)
+	}
+	if *gitDiff && *file != "" {
+		fmt.Fprintf(os.Stderr, "error: -git-diff and -file cannot be used together\n")
+		os.Exit(1)
+	}
+
 	if *checkerName != "" && *group != "" {
 		fmt.Fprintf(os.Stderr, "error: -checker and -group cannot be used together\n")
 		os.Exit(1)
@@ -229,6 +243,7 @@ func main() {
 	excludePatterns := parseExcludePatterns(*exclude)
 
 	var allIssues []checker.Issue
+	var gitDiffResult *diffResult // non-nil when -git-diff is active
 
 	if *stdin {
 		src, readErr := io.ReadAll(os.Stdin)
@@ -293,6 +308,30 @@ func main() {
 				if !fileExcluded(p, excludePatterns) {
 					paths = append(paths, p)
 				}
+			}
+		} else if *gitDiff {
+			root, absErr := filepath.Abs(*dir)
+			if absErr != nil {
+				fmt.Fprintf(os.Stderr, "abs error: %v\n", absErr)
+				os.Exit(1)
+			}
+			dr, diffErr := runGitDiff(root)
+			if diffErr != nil {
+				fmt.Fprintf(os.Stderr, "git error: %v\n", diffErr)
+				os.Exit(1)
+			}
+			gitDiffResult = dr
+			for _, p := range dr.files {
+				if !strings.HasSuffix(p, ".go") {
+					continue
+				}
+				if !fileExcluded(p, excludePatterns) {
+					paths = append(paths, p)
+				}
+			}
+			if len(paths) == 0 {
+				fmt.Printf("%s No Go changes detected in working tree or index\n", symOK)
+				return
 			}
 		} else {
 			err := filepath.Walk(*dir, func(path string, info os.FileInfo, err error) error {
@@ -364,6 +403,11 @@ func main() {
 		}
 	}
 
+	// For -git-diff mode, restrict issues to lines actually changed in the diff.
+	if gitDiffResult != nil {
+		allIssues = filterByChangedLines(allIssues, gitDiffResult.changedLines)
+	}
+
 	// Deduplicate issues (can occur with nested loops)
 	allIssues = checker.DedupeIssues(allIssues)
 
@@ -425,6 +469,8 @@ func main() {
 			fmt.Printf("%s No performance issues found in <stdin>\n", symOK)
 		case *file != "":
 			fmt.Printf("%s No performance issues found in %s\n", symOK, *file)
+		case *gitDiff:
+			fmt.Printf("%s No performance issues found in changed lines\n", symOK)
 		case *gitStaged:
 			fmt.Printf("%s No performance issues found in staged files\n", symOK)
 		default:

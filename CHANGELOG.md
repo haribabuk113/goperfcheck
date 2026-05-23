@@ -9,6 +9,33 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+- **`-git-diff` flag — diff-aware scanning**: `goperfcheck -git-diff` checks only
+  the lines that were added or modified compared to HEAD. It combines staged and
+  unstaged working-tree changes (`git diff HEAD`) so a single flag covers the full
+  set of edits since the last commit, without re-checking unchanged code.
+
+  How it differs from `-git-staged`:
+
+  | Flag | What is checked |
+  |------|----------------|
+  | `-git-staged` | All lines of every **staged file** |
+  | `-git-diff` | Only the **added/modified lines** across both staged and unstaged files |
+
+  Use `-git-diff` in editors and pre-save hooks where you want instant, noise-free
+  feedback scoped to exactly what you just wrote. Use `-git-staged` in pre-commit
+  hooks where you want full coverage of every file you are about to commit.
+
+  Implementation notes:
+  - Parses the unified diff from `git diff HEAD` to build a per-file set of
+    changed line numbers; issues are filtered to that set after scanning.
+  - Newly created files (`git add`-ed) appear as fully-added in the diff, so all
+    issues in them are reported.
+  - Untracked files (not yet `git add`-ed) are not covered; `git add` them first.
+  - Conflicts with `-git-staged`, `-stdin`, and `-file` (exits with an error).
+  - When the diff contains no `.go` files, exits cleanly with
+    `No Go changes detected in working tree or index`.
+
 ### Fixed
 - **Unknown subcommand rejected**: positional arguments that are not a recognised
   subcommand (e.g. `goperfcheck help`, `goperfcheck version`) previously fell
