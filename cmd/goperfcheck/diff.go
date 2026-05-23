@@ -14,7 +14,7 @@ import (
 // diffResult holds the files touched by a git diff and the specific new-file
 // line numbers that were added (+) in each file.
 type diffResult struct {
-	files        []string            // absolute paths, in diff order
+	files        []string                // absolute paths, in diff order
 	changedLines map[string]map[int]bool // abs path → set of added line numbers (1-based)
 }
 

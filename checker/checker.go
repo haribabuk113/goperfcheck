@@ -19,7 +19,7 @@ const (
 // FixHint carries machine-readable rewrite information for the -fix flag.
 // Only a subset of issues are fixable; the rest leave Fix nil.
 type FixHint struct {
-	Kind       string `json:"kind"`                 // "map_cap" | "slice_cap" | "struct_reorder"
+	Kind       string `json:"kind"`                  // "map_cap" | "slice_cap" | "struct_reorder"
 	VarName    string `json:"var,omitempty"`         // slice variable to update (slice_cap only)
 	Cap        string `json:"cap,omitempty"`         // capacity expression, e.g. "len(items)"
 	StructName string `json:"struct_name,omitempty"` // type name of the struct (struct_reorder)
