@@ -78,6 +78,10 @@ func fixFile(path string, issues []checker.Issue) (int, error) {
 			if e, ok := sliceCapEdit(fset, file, src, iss); ok {
 				edits = append(edits, e)
 			}
+		case "struct_reorder":
+			if e, ok := structReorderEdit(fset, file, src, iss); ok {
+				edits = append(edits, e)
+			}
 		}
 	}
 	if len(edits) == 0 {
@@ -220,6 +224,98 @@ func sliceCapEdit(fset *token.FileSet, file *ast.File, src []byte, iss checker.I
 type loopContext struct {
 	block *ast.BlockStmt
 	index int
+}
+
+// structReorderEdit returns an edit that rewrites the fields of the named struct
+// in the order prescribed by iss.Fix.FieldOrder (largest size first). It works
+// at the source-line level: each *ast.Field's source lines (including any doc
+// comment before it and any trailing line comment) are extracted verbatim and
+// reassembled in the new order, so tags, alignment whitespace, and comments are
+// all preserved exactly.
+func structReorderEdit(fset *token.FileSet, file *ast.File, src []byte, iss checker.Issue) (struct {
+	start, end int
+	text       string
+}, bool) {
+	type edit struct {
+		start, end int
+		text       string
+	}
+
+	// Locate the struct by name.
+	var target *ast.StructType
+	ast.Inspect(file, func(n ast.Node) bool {
+		if target != nil {
+			return false
+		}
+		ts, ok := n.(*ast.TypeSpec)
+		if !ok {
+			return true
+		}
+		if ts.Name.Name != iss.Fix.StructName {
+			return true
+		}
+		if st, ok := ts.Type.(*ast.StructType); ok {
+			target = st
+		}
+		return false
+	})
+	if target == nil || target.Fields == nil || len(target.Fields.List) < 2 {
+		return edit{}, false
+	}
+
+	fields := target.Fields.List
+	order := iss.Fix.FieldOrder
+	if len(order) != len(fields) {
+		return edit{}, false
+	}
+
+	tf := fset.File(fields[0].Pos())
+
+	// lineStartOffset returns the byte offset of the first character of line l (1-based).
+	lineStartOffset := func(l int) int {
+		return tf.Offset(tf.LineStart(l))
+	}
+	// lineEndOffset returns the byte offset just past the '\n' that ends line l.
+	// For the last line of the file (no trailing newline), it returns tf.Size().
+	lineEndOffset := func(l int) int {
+		if l < tf.LineCount() {
+			return tf.Offset(tf.LineStart(l + 1))
+		}
+		return tf.Size()
+	}
+
+	// Compute the full line range for each field: extend backwards to include any
+	// doc-comment block, and forwards to include any trailing line comment.
+	type lineRange struct{ first, last int }
+	ranges := make([]lineRange, len(fields))
+	for i, f := range fields {
+		first := fset.Position(f.Pos()).Line
+		if f.Doc != nil {
+			first = fset.Position(f.Doc.Pos()).Line
+		}
+		last := fset.Position(f.End()).Line
+		if f.Comment != nil {
+			last = fset.Position(f.Comment.End()).Line
+		}
+		ranges[i] = lineRange{first, last}
+	}
+
+	// Extract the raw source bytes for every field (entire lines, newline included).
+	fieldBytes := make([][]byte, len(fields))
+	for i, r := range ranges {
+		fieldBytes[i] = src[lineStartOffset(r.first):lineEndOffset(r.last)]
+	}
+
+	// Assemble the reordered field text.
+	var buf bytes.Buffer
+	for _, idx := range order {
+		buf.Write(fieldBytes[idx])
+	}
+
+	editStart := lineStartOffset(ranges[0].first)
+	editEnd := lineEndOffset(ranges[len(ranges)-1].last)
+
+	return edit{start: editStart, end: editEnd, text: buf.String()}, true
 }
 
 // findEnclosingLoop returns the loopContext for the innermost for/range loop

@@ -3,6 +3,7 @@ package checker
 import (
 	"go/parser"
 	"go/token"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -68,6 +69,98 @@ type Small struct {
 			}
 		})
 	}
+}
+
+func TestStructAlignFixHint(t *testing.T) {
+	c := &StructAlignChecker{}
+
+	parse := func(src string) []Issue {
+		fset := token.NewFileSet()
+		f, err := parser.ParseFile(fset, "test.go", src, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c.Check(fset, f)
+	}
+
+	t.Run("fix hint populated on bad struct", func(t *testing.T) {
+		issues := parse(`package p
+type Bad struct {
+	flag bool
+	val  int64
+	name string
+}`)
+		if len(issues) != 1 {
+			t.Fatalf("got %d issues, want 1", len(issues))
+		}
+		fix := issues[0].Fix
+		if fix == nil {
+			t.Fatal("Fix is nil — struct_reorder hint must be populated")
+		}
+		if fix.Kind != "struct_reorder" {
+			t.Errorf("Fix.Kind = %q, want %q", fix.Kind, "struct_reorder")
+		}
+		if fix.StructName != "Bad" {
+			t.Errorf("Fix.StructName = %q, want %q", fix.StructName, "Bad")
+		}
+		// Fields by approxSize: val int64=8, name string=16, flag bool=1
+		// Sorted largest-first: name(idx=2,16B), val(idx=1,8B), flag(idx=0,1B)
+		want := []int{2, 1, 0}
+		if !reflect.DeepEqual(fix.FieldOrder, want) {
+			t.Errorf("Fix.FieldOrder = %v, want %v", fix.FieldOrder, want)
+		}
+	})
+
+	t.Run("fix not nil for exported struct", func(t *testing.T) {
+		issues := parse(`package p
+type Exported struct {
+	flag bool
+	val  int64
+	name string
+}`)
+		if len(issues) != 1 {
+			t.Fatalf("got %d issues, want 1", len(issues))
+		}
+		if issues[0].Fix == nil {
+			t.Error("Fix should not be nil for exported struct; user opts in with -fix")
+		}
+	})
+
+	t.Run("no fix hint on already-sorted struct", func(t *testing.T) {
+		// A correctly-ordered struct fires no issue, so Fix is irrelevant.
+		issues := parse(`package p
+type Good struct {
+	val  int64
+	name string
+	flag bool
+}`)
+		if len(issues) != 0 {
+			t.Errorf("good struct should produce no issues, got %d", len(issues))
+		}
+	})
+
+	t.Run("fix field order reflects four-field struct", func(t *testing.T) {
+		// {bool,int64,bool,int64} — all bools should end up after int64s.
+		issues := parse(`package p
+type Quad struct {
+	a bool
+	b int64
+	c bool
+	d int64
+}`)
+		if len(issues) != 1 {
+			t.Fatalf("got %d issues, want 1", len(issues))
+		}
+		fix := issues[0].Fix
+		if fix == nil {
+			t.Fatal("Fix is nil")
+		}
+		// Sizes: a=1,b=8,c=1,d=8. Sorted stable: b(idx1,8),d(idx3,8),a(idx0,1),c(idx2,1)
+		want := []int{1, 3, 0, 2}
+		if !reflect.DeepEqual(fix.FieldOrder, want) {
+			t.Errorf("Fix.FieldOrder = %v, want %v", fix.FieldOrder, want)
+		}
+	})
 }
 
 func TestStructAlignExportedWarning(t *testing.T) {

@@ -32,6 +32,37 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   Flag defaults and all other behaviour are unchanged.
 
 ### Added
+- **`-fix` now rewrites `StructAlign` issues (field reordering)**: the auto-fix
+  flag previously only handled `MemPrealloc` (slice/map capacity hints). It now
+  also rewrites struct field ordering for any struct flagged by `StructAlign`.
+
+  The rewrite sorts fields **largest → smallest** (by `approxSize`), which
+  eliminates padding waste without changing the struct's total field set or
+  removing any comments, tags, or doc-comment blocks. Specifically:
+
+  - **Struct tags are preserved** — each field's tag stays on the same line as
+    the field, moved together.
+  - **Inline comments are preserved** — trailing `// comment` lines move with
+    their field.
+  - **Doc comment blocks are preserved** — multi-line `// doc` blocks that
+    immediately precede a field are treated as part of that field and reordered
+    with it.
+  - **`gofmt`-clean output** — the reordered source is formatted via
+    `go/format.Source` before write.
+  - **Exported structs** — the fix is applied for both exported and unexported
+    structs. Exported structs already carry the API-safety caveat in the issue
+    suggestion ("audit callers for positional struct literals before
+    reordering"). The user opts in to the risk by passing `-fix`.
+
+  Implementation notes:
+  - `FixHint` gains two new fields: `StructName string` (type name) and
+    `FieldOrder []int` (pre-computed sorted field indices). The checker
+    computes the optimal order once at detection time; the fixer only needs
+    to reorder lines.
+  - The fixer works at the source-line level using `token.File.LineStart` to
+    map AST positions to byte offsets, so it handles any indentation style.
+  - New `fix.go` function: `structReorderEdit`.
+
 - **`-git-diff` flag — diff-aware scanning**: `goperfcheck -git-diff` checks only
   the lines that were added or modified compared to HEAD. It combines staged and
   unstaged working-tree changes (`git diff HEAD`) so a single flag covers the full

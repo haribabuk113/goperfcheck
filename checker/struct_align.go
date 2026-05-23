@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"sort"
 	"strings"
 )
 
@@ -119,6 +120,21 @@ func (c *StructAlignChecker) Check(fset *token.FileSet, file *ast.File) []Issue 
 					)
 				}
 
+				// Compute the optimal field ordering (largest → smallest, stable).
+				// Indices map into st.Fields.List so fix.go can locate the exact AST nodes.
+				type idxSize struct{ idx, size int }
+				sortable := make([]idxSize, len(fields))
+				for j, f := range fields {
+					sortable[j] = idxSize{idx: j, size: f.size}
+				}
+				sort.SliceStable(sortable, func(a, b int) bool {
+					return sortable[a].size > sortable[b].size
+				})
+				order := make([]int, len(sortable))
+				for j, s := range sortable {
+					order[j] = s.idx
+				}
+
 				issues = append(issues, Issue{
 					Checker:  c.Name(),
 					File:     p.Filename,
@@ -133,6 +149,11 @@ func (c *StructAlignChecker) Check(fset *token.FileSet, file *ast.File) []Issue 
 					Rule:       "Struct Field Alignment — https://goperf.dev/01-common-patterns/fields-alignment/",
 					Suggestion: suggestion,
 					Benchmark:  "32B → 24B per instance (25% less memory) for a {bool,int64,bool,int64} struct — GC work scales with live heap size (Go 1.26 benchmark, see benchmarks/)",
+					Fix: &FixHint{
+						Kind:       "struct_reorder",
+						StructName: ts.Name.Name,
+						FieldOrder: order,
+					},
 				})
 				break // one issue per struct
 			}
