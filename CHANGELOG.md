@@ -9,6 +9,24 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+- **Clickable file links in terminal output**: every issue line now shows
+  `rel/path/to/file.go:line:col` as the file location, placed between the
+  severity tag and the checker name. In terminals that support OSC 8
+  hyperlinks (iTerm2, WezTerm, GNOME Terminal 3.26+, VS Code integrated
+  terminal, Kitty), the location is a clickable link that opens the file
+  directly. Plain-text output (piped, CI, `-output` files) is unaffected —
+  the escape codes are omitted when stdout is not a TTY or color is disabled.
+
+  Before:
+  ```
+     [WARN] MemPrealloc:10:5
+  ```
+  After:
+  ```
+     [WARN] example.go:10:5  MemPrealloc
+  ```
+
 ### Fixed
 - **`-cache false` now works as expected**: previously, `-cache false`
   (space-separated) silently left the cache enabled and treated `false` as a

@@ -515,7 +515,7 @@ func main() {
 			fmt.Printf("\n%s %s  (%d issue(s))\n", symFile, rel, countPerFile[rel])
 			prevFile = rel
 		}
-		fmt.Printf("   %s %s:%d:%d\n", coloredSeverity(issue.Severity, colorEnabled), issue.Checker, issue.Line, issue.Column)
+		fmt.Printf("   %s %s  %s\n", coloredSeverity(issue.Severity, colorEnabled), fileLink(issue.File, rel, issue.Line, issue.Column, colorEnabled), issue.Checker)
 		fmt.Printf("   %s %s\n", symWarn, issue.Message)
 		if issue.Suggestion != "" {
 			fmt.Printf("   %s %s\n", symHint, issue.Suggestion)

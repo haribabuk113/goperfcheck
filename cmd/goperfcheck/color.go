@@ -97,6 +97,20 @@ func coloredConfidencePadded(conf checker.Confidence, totalWidth int, color bool
 	return code + s + ansiReset + spaces
 }
 
+// fileLink returns a displayable file location string of the form "rel:line:col".
+// When color is enabled the string is wrapped in an OSC 8 terminal hyperlink
+// pointing at the file so that supporting terminals (iTerm2, WezTerm, GNOME
+// Terminal 3.26+, VS Code integrated terminal) make the text clickable and open
+// the file directly. Plain-text mode (color=false) returns the bare location
+// string with no escape codes — safe for pipes, CI logs, and -output files.
+func fileLink(absPath, relPath string, line, col int, color bool) string {
+	text := fmt.Sprintf("%s:%d:%d", relPath, line, col)
+	if !color {
+		return text
+	}
+	return "\x1b]8;;file://" + absPath + "\x1b\\" + text + "\x1b]8;;\x1b\\"
+}
+
 // coloredCount formats "N SEVERITY" and applies color when color is enabled
 // and n > 0. Zero counts are always printed without color.
 func coloredCount(n int, s checker.Severity, color bool) string {

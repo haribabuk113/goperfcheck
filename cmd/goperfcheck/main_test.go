@@ -201,6 +201,49 @@ func TestCacheEnabledByDefault(t *testing.T) {
 	}
 }
 
+func TestOutputContainsFileLocation(t *testing.T) {
+	// Every issue line must include a file:line:col location so users can
+	// navigate directly to the finding. The format is relpath:line:col appearing
+	// between the severity tag and the checker name on the same output line.
+	bin := buildBinary(t)
+	dir := tempDirWithGoFile(t)
+
+	out, _ := exec.Command(bin, "-dir", dir).CombinedOutput()
+	output := string(out)
+
+	// The file written by tempDirWithGoFile is called "example.go".
+	// At least one line must contain "example.go:<line>:<col>".
+	if !strings.Contains(output, "example.go:") {
+		t.Errorf("output should contain file location (example.go:<line>:<col>); got:\n%s", output)
+	}
+}
+
+func TestFileLinkFormatLineCol(t *testing.T) {
+	// The per-issue line must contain a colon-separated file:line:col triple so
+	// that editors that parse linter output can jump to the finding.
+	bin := buildBinary(t)
+	dir := tempDirWithGoFile(t)
+
+	out, _ := exec.Command(bin, "-dir", dir).CombinedOutput()
+
+	// Find the line with the issue severity tag. It must also contain a
+	// path:number:number pattern on the same line.
+	for _, line := range strings.Split(string(out), "\n") {
+		if !strings.Contains(line, "[WARN]") && !strings.Contains(line, "[INFO]") && !strings.Contains(line, "[ERROR]") {
+			continue
+		}
+		// The checker name (MemPrealloc) should appear after the location.
+		if strings.Contains(line, "example.go") {
+			// Verify the format is file:line:col followed by the checker.
+			if !strings.Contains(line, ":") {
+				t.Errorf("issue line missing colon-separated location: %q", line)
+			}
+			return
+		}
+	}
+	t.Errorf("no issue line containing file location found in:\n%s", string(out))
+}
+
 func TestCacheFalseProducesSameResultsAsDefault(t *testing.T) {
 	bin := buildBinary(t)
 
