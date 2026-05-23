@@ -10,6 +10,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Fixed
+- **Unknown subcommand rejected**: positional arguments that are not a recognised
+  subcommand (e.g. `goperfcheck help`, `goperfcheck version`) previously fell
+  through silently and triggered a full directory scan of `.`. They now print a
+  clear error message (`error: unknown subcommand "help"`) and exit with code 2.
+  The error output also lists the only known subcommand (`explain`) and points to
+  `goperfcheck -help` for flag usage. The `explain` subcommand and all `-flags`
+  are unaffected.
+
 - **Markdown report benchmark on new line**: in the `-output report.md` format,
   the `📊 <benchmark>` line was rendering on the same line as `💡 <suggestion>`
   because the suggestion line lacked the two trailing spaces required for a

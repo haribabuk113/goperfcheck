@@ -117,9 +117,15 @@ func main() {
 	}
 
 	// "explain" is a subcommand, not a flag: goperfcheck explain <CheckerName>
-	if args := flag.Args(); len(args) >= 1 && strings.EqualFold(args[0], "explain") {
-		runExplain(args[1:], colorEnabled)
-		return
+	// Any other positional argument is an unrecognized subcommand — reject it
+	// rather than silently scanning the current directory.
+	if args := flag.Args(); len(args) >= 1 {
+		if strings.EqualFold(args[0], "explain") {
+			runExplain(args[1:], colorEnabled)
+			return
+		}
+		fmt.Fprintf(os.Stderr, "error: unknown subcommand %q\n\nKnown subcommands:\n  explain   print what a checker looks for and code examples\n\nRun 'goperfcheck -help' for flag usage.\n", args[0])
+		os.Exit(2)
 	}
 
 	if *listCheckers {
