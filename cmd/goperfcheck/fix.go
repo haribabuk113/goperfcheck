@@ -160,9 +160,14 @@ func mapCapEdit(fset *token.FileSet, file *ast.File, iss checker.Issue) (struct 
 	return edit{start: offset, end: offset, text: ", " + iss.Fix.Cap}, true
 }
 
-// sliceCapEdit builds an edit that replaces "var x []T" immediately before the
-// enclosing loop with "x := make([]T, 0, cap)". Returns false when the pattern
-// does not match (non-var declaration, multiple vars, type not a slice, etc.).
+// sliceCapEdit builds an edit that inserts a capacity hint into the slice
+// declaration immediately before the enclosing loop. Handles four patterns:
+//
+//	var x []T              →  x := make([]T, 0, cap)
+//	var x []T = nil        →  x := make([]T, 0, cap)
+//	var x = make([]T, n)   →  var x = make([]T, n, cap)
+//	x := []T{}             →  x := make([]T, 0, cap)
+//	x := make([]T, n)      →  x := make([]T, n, cap)
 func sliceCapEdit(fset *token.FileSet, file *ast.File, src []byte, iss checker.Issue) (struct {
 	start, end int
 	text       string
@@ -178,45 +183,98 @@ func sliceCapEdit(fset *token.FileSet, file *ast.File, src []byte, iss checker.I
 	}
 
 	prev := ctx.block.List[ctx.index-1]
-	decl, ok := prev.(*ast.DeclStmt)
-	if !ok {
-		return edit{}, false
-	}
-	gen, ok := decl.Decl.(*ast.GenDecl)
-	if !ok || gen.Tok != token.VAR || len(gen.Specs) != 1 {
-		return edit{}, false
-	}
-	spec, ok := gen.Specs[0].(*ast.ValueSpec)
-	if !ok || len(spec.Names) != 1 {
-		return edit{}, false
-	}
-	if spec.Names[0].Name != iss.Fix.VarName {
-		return edit{}, false
-	}
-	arr, ok := spec.Type.(*ast.ArrayType)
-	if !ok || arr.Len != nil { // must be a slice, not fixed-size array
-		return edit{}, false
-	}
-	// Only handle nil or absent initializer to avoid rewriting non-trivial values.
-	if len(spec.Values) > 0 {
-		id, ok := spec.Values[0].(*ast.Ident)
-		if !ok || id.Name != "nil" {
+	varName := iss.Fix.VarName
+	capHint := iss.Fix.Cap
+
+	// Pattern A: DeclStmt — var x []T, var x []T = nil, var x = make([]T, n)
+	if decl, ok := prev.(*ast.DeclStmt); ok {
+		gen, ok := decl.Decl.(*ast.GenDecl)
+		if !ok || gen.Tok != token.VAR || len(gen.Specs) != 1 {
 			return edit{}, false
+		}
+		spec, ok := gen.Specs[0].(*ast.ValueSpec)
+		if !ok || len(spec.Names) != 1 || spec.Names[0].Name != varName {
+			return edit{}, false
+		}
+
+		// A1: var x []T  or  var x []T = nil  →  x := make([]T, 0, cap)
+		if arr, ok := spec.Type.(*ast.ArrayType); ok && arr.Len == nil {
+			if len(spec.Values) == 0 || isNilIdent(spec.Values[0]) {
+				var typeBuf bytes.Buffer
+				if err := format.Node(&typeBuf, fset, arr); err != nil {
+					return edit{}, false
+				}
+				newText := varName + " := make(" + typeBuf.String() + ", 0, " + capHint + ")"
+				tf := fset.File(prev.Pos())
+				return edit{start: tf.Offset(prev.Pos()), end: tf.Offset(prev.End()), text: newText}, true
+			}
+		}
+
+		// A2: var x = make([]T, n)  →  insert ", cap" before closing paren
+		if len(spec.Values) == 1 {
+			if mc := sliceMake2Arg(spec.Values[0]); mc != nil {
+				tf := fset.File(mc.Rparen)
+				off := tf.Offset(mc.Rparen)
+				return edit{start: off, end: off, text: ", " + capHint}, true
+			}
+		}
+		return edit{}, false
+	}
+
+	// Pattern B: AssignStmt with := — x := []T{}  or  x := make([]T, n)
+	if assign, ok := prev.(*ast.AssignStmt); ok &&
+		assign.Tok == token.DEFINE && len(assign.Lhs) == 1 && len(assign.Rhs) == 1 {
+		id, ok := assign.Lhs[0].(*ast.Ident)
+		if !ok || id.Name != varName {
+			return edit{}, false
+		}
+
+		// B1: x := []T{}  →  x := make([]T, 0, cap)
+		if lit, ok := assign.Rhs[0].(*ast.CompositeLit); ok && len(lit.Elts) == 0 {
+			if arr, ok := lit.Type.(*ast.ArrayType); ok && arr.Len == nil {
+				var typeBuf bytes.Buffer
+				if err := format.Node(&typeBuf, fset, arr); err != nil {
+					return edit{}, false
+				}
+				newText := varName + " := make(" + typeBuf.String() + ", 0, " + capHint + ")"
+				tf := fset.File(prev.Pos())
+				return edit{start: tf.Offset(prev.Pos()), end: tf.Offset(prev.End()), text: newText}, true
+			}
+		}
+
+		// B2: x := make([]T, n)  →  insert ", cap" before closing paren
+		if mc := sliceMake2Arg(assign.Rhs[0]); mc != nil {
+			tf := fset.File(mc.Rparen)
+			off := tf.Offset(mc.Rparen)
+			return edit{start: off, end: off, text: ", " + capHint}, true
 		}
 	}
 
-	var typeBuf bytes.Buffer
-	if err := format.Node(&typeBuf, fset, arr); err != nil {
-		return edit{}, false
-	}
+	return edit{}, false
+}
 
-	newText := iss.Fix.VarName + " := make(" + typeBuf.String() + ", 0, " + iss.Fix.Cap + ")"
-	tf := fset.File(prev.Pos())
-	return edit{
-		start: tf.Offset(prev.Pos()),
-		end:   tf.Offset(prev.End()),
-		text:  newText,
-	}, true
+// isNilIdent reports whether expr is the identifier nil.
+func isNilIdent(expr ast.Expr) bool {
+	id, ok := expr.(*ast.Ident)
+	return ok && id.Name == "nil"
+}
+
+// sliceMake2Arg returns the CallExpr if expr is make([]T, n) — a 2-argument
+// make call whose first argument is a slice type. Returns nil otherwise.
+func sliceMake2Arg(expr ast.Expr) *ast.CallExpr {
+	call, ok := expr.(*ast.CallExpr)
+	if !ok {
+		return nil
+	}
+	fn, ok := call.Fun.(*ast.Ident)
+	if !ok || fn.Name != "make" || len(call.Args) != 2 {
+		return nil
+	}
+	arr, ok := call.Args[0].(*ast.ArrayType)
+	if !ok || arr.Len != nil {
+		return nil
+	}
+	return call
 }
 
 // loopContext records an enclosing for/range loop and its position in the

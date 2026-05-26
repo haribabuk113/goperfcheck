@@ -194,6 +194,153 @@ type Good struct {
 	}
 }
 
+// applySliceCapFix is a test helper that runs MemPreallocChecker on src, finds
+// the first slice_cap fix, applies sliceCapEdit, and returns the rewritten source.
+func applySliceCapFix(t *testing.T, src string) string {
+	t.Helper()
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "test.go", src, parser.ParseComments)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	c := &checker.MemPreallocChecker{}
+	issues := c.Check(fset, file)
+	var fixable *checker.Issue
+	for i := range issues {
+		if issues[i].Fix != nil && issues[i].Fix.Kind == "slice_cap" {
+			fixable = &issues[i]
+			break
+		}
+	}
+	if fixable == nil {
+		t.Fatal("no slice_cap fix found in issues")
+	}
+	e, ok := sliceCapEdit(fset, file, []byte(src), *fixable)
+	if !ok {
+		t.Fatal("sliceCapEdit returned false")
+	}
+	b := []byte(src)
+	result := append(b[:e.start], append([]byte(e.text), b[e.end:]...)...)
+	return string(result)
+}
+
+func TestSliceCapEditVarDecl(t *testing.T) {
+	src := `package p
+func f(items []string) []string {
+	var out []string
+	for _, v := range items {
+		out = append(out, v)
+	}
+	return out
+}`
+	got := applySliceCapFix(t, src)
+	if !strings.Contains(got, "make([]string, 0, len(items))") {
+		t.Errorf("expected make with cap, got:\n%s", got)
+	}
+	if strings.Contains(got, "var out") {
+		t.Errorf("var decl should have been replaced, got:\n%s", got)
+	}
+}
+
+func TestSliceCapEditVarDeclNil(t *testing.T) {
+	src := `package p
+func f(items []string) []string {
+	var out []string = nil
+	for _, v := range items {
+		out = append(out, v)
+	}
+	return out
+}`
+	got := applySliceCapFix(t, src)
+	if !strings.Contains(got, "make([]string, 0, len(items))") {
+		t.Errorf("expected make with cap, got:\n%s", got)
+	}
+}
+
+func TestSliceCapEditEmptyLiteral(t *testing.T) {
+	// x := []T{} immediately before loop — should be rewritten to make
+	src := `package p
+func f(items []string) []string {
+	out := []string{}
+	for _, v := range items {
+		out = append(out, v)
+	}
+	return out
+}`
+	got := applySliceCapFix(t, src)
+	if !strings.Contains(got, "make([]string, 0, len(items))") {
+		t.Errorf("expected make with cap, got:\n%s", got)
+	}
+	if strings.Contains(got, "[]string{}") {
+		t.Errorf("empty literal should have been replaced, got:\n%s", got)
+	}
+}
+
+func TestSliceCapEditMake2Arg(t *testing.T) {
+	// x := make([]T, 0) immediately before loop — should have cap added
+	src := `package p
+func f(items []string) []string {
+	out := make([]string, 0)
+	for _, v := range items {
+		out = append(out, v)
+	}
+	return out
+}`
+	got := applySliceCapFix(t, src)
+	if !strings.Contains(got, "make([]string, 0, len(items))") {
+		t.Errorf("expected cap added to existing make, got:\n%s", got)
+	}
+}
+
+func TestSliceCapEditVarMake2Arg(t *testing.T) {
+	// var x = make([]T, 0) — var form of 2-arg make — should have cap added
+	src := `package p
+func f(items []string) []string {
+	var out = make([]string, 0)
+	for _, v := range items {
+		out = append(out, v)
+	}
+	return out
+}`
+	got := applySliceCapFix(t, src)
+	if !strings.Contains(got, "make([]string, 0, len(items))") {
+		t.Errorf("expected cap added to var make, got:\n%s", got)
+	}
+}
+
+func TestSliceCapEditMake2ArgNonZeroLen(t *testing.T) {
+	// x := make([]T, n) — non-zero length, cap should be added as third arg
+	src := `package p
+func f(n int, items []string) []string {
+	out := make([]string, n)
+	for _, v := range items {
+		out = append(out, v)
+	}
+	return out
+}`
+	got := applySliceCapFix(t, src)
+	if !strings.Contains(got, "make([]string, n, len(items))") {
+		t.Errorf("expected cap added preserving existing len, got:\n%s", got)
+	}
+}
+
+func TestSliceCapEditEmptyLiteralOfStruct(t *testing.T) {
+	// Slice of structs — type should be preserved exactly
+	src := `package p
+type Item struct{ Name string }
+func f(items []Item) []Item {
+	out := []Item{}
+	for _, v := range items {
+		out = append(out, v)
+	}
+	return out
+}`
+	got := applySliceCapFix(t, src)
+	if !strings.Contains(got, "make([]Item, 0, len(items))") {
+		t.Errorf("expected make with struct slice type, got:\n%s", got)
+	}
+}
+
 func TestStructReorderEditFourFields(t *testing.T) {
 	// {bool, int64, bool, int64} — both bools should end up after both int64s.
 	src := `package p

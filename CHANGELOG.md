@@ -10,6 +10,22 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Fixed
+- **`-fix` for `MemPrealloc` now rewrites all common slice declaration patterns**:
+  previously only `var x []T` (and `var x []T = nil`) immediately before a loop
+  were auto-fixed. Three additional patterns are now handled:
+
+  | Before | After |
+  |--------|-------|
+  | `var x = make([]T, 0)` | `var x = make([]T, 0, len(items))` |
+  | `x := []T{}` | `x := make([]T, 0, len(items))` |
+  | `x := make([]T, 0)` | `x := make([]T, 0, len(items))` |
+  | `x := make([]T, n)` | `x := make([]T, n, len(items))` |
+
+  The rule is the same for all patterns: the declaration must be the statement
+  immediately before the enclosing loop. Declarations that are further away are
+  not rewritten — there may be intervening assignments that would make the
+  rewrite unsafe without flow analysis.
+
 - **`MemPrealloc` now correctly flags unpreallocated slices in all functions**:
   preallocated-slice tracking was scoped to the entire file instead of each
   function. The fix-suppression check (`isPreallocatedBefore`) compared raw
