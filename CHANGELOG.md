@@ -10,6 +10,27 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Fixed
+- **`-file` with a subdirectory path now shows the relative path in output**:
+  previously, `-file dir/file.go` displayed the full absolute path (e.g.
+  `/home/user/project/dir/file.go`) instead of the expected `dir/file.go`.
+  The bug was that terminal output computed `filepath.Rel(".", absolutePath)`,
+  which always fails because one operand is relative and the other is absolute.
+  The Markdown report had the same defect. SARIF output was already correct.
+
+  Fix: both the terminal output and the Markdown report now call
+  `filepath.Abs(*dir)` first and use the resulting absolute base path for
+  `filepath.Rel`, matching the approach already used in `writeSARIFReport`.
+
+  ```
+  # Before fix
+  goperfcheck -file pkg/server/handler.go
+  📁 /home/user/project/pkg/server/handler.go  (2 issue(s))
+
+  # After fix
+  goperfcheck -file pkg/server/handler.go
+  📁 pkg/server/handler.go  (2 issue(s))
+  ```
+
 - **`MemPrealloc` no longer re-flags issues that were already fixed by `-fix`**:
   previously, running `goperfcheck -fix` rewrote `var out []string` to
   `out := make([]string, 0, len(items))`, but a subsequent `goperfcheck` run

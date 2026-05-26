@@ -244,6 +244,51 @@ func TestFileLinkFormatLineCol(t *testing.T) {
 	t.Errorf("no issue line containing file location found in:\n%s", string(out))
 }
 
+func TestFileInSubdirShowsRelativePath(t *testing.T) {
+	// Regression test: -file dir/file.go must display "dir/file.go" in output,
+	// not the full absolute path. The bug was that filepath.Rel(".", "/abs/path")
+	// always fails (can't relate a relative base to an absolute target), so the
+	// code fell back to issue.File (absolute). Fix: use filepath.Abs(*dir) as the
+	// base before calling filepath.Rel.
+	bin := buildBinary(t)
+
+	// Create a subdirectory with a Go file that triggers an issue.
+	root := t.TempDir()
+	sub := filepath.Join(root, "mypkg")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	goSrc := []byte(`package mypkg
+
+func collect(items []string) []string {
+	var out []string
+	for _, v := range items {
+		out = append(out, v)
+	}
+	return out
+}
+`)
+	goFile := filepath.Join(sub, "collect.go")
+	if err := os.WriteFile(goFile, goSrc, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run from root so -file receives a subdirectory path.
+	cmd := exec.Command(bin, "-file", filepath.Join("mypkg", "collect.go"), "-no-color")
+	cmd.Dir = root
+	out, _ := cmd.CombinedOutput()
+	output := string(out)
+
+	// The path shown must be the relative path, not an absolute path.
+	if strings.Contains(output, root) {
+		t.Errorf("-file with subdir path: output contains absolute path %q; want relative path\noutput:\n%s", root, output)
+	}
+	wantRel := filepath.Join("mypkg", "collect.go")
+	if !strings.Contains(output, wantRel) {
+		t.Errorf("-file with subdir path: output does not contain relative path %q\noutput:\n%s", wantRel, output)
+	}
+}
+
 func TestCacheFalseProducesSameResultsAsDefault(t *testing.T) {
 	bin := buildBinary(t)
 

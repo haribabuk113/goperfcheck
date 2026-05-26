@@ -494,10 +494,16 @@ func main() {
 		return
 	}
 
+	// absDir is the absolute form of *dir so that filepath.Rel works correctly
+	// even when *dir is "." (relative) and issue.File is absolute. Without this,
+	// filepath.Rel(".", "/abs/path") always returns an error, causing the display
+	// to fall back to the full absolute path instead of the intended relative one.
+	absDir, _ := filepath.Abs(*dir)
+
 	// Pre-count issues per relative path so the file header can show the total.
 	countPerFile := make(map[string]int, len(allIssues))
 	for _, issue := range allIssues {
-		rel, _ := filepath.Rel(*dir, issue.File)
+		rel, _ := filepath.Rel(absDir, issue.File)
 		if rel == "" {
 			rel = issue.File
 		}
@@ -507,7 +513,7 @@ func main() {
 	// Print results grouped by file
 	prevFile := ""
 	for _, issue := range allIssues {
-		rel, _ := filepath.Rel(*dir, issue.File)
+		rel, _ := filepath.Rel(absDir, issue.File)
 		if rel == "" {
 			rel = issue.File
 		}

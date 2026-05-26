@@ -156,7 +156,7 @@ func writeMarkdownReport(path string, issues []checker.Issue, dir string) (retEr
 		}
 
 		for _, iss := range cs.issues {
-			rel, _ := filepath.Rel(dir, iss.File)
+			rel, _ := filepath.Rel(absDir, iss.File)
 			if rel == "" {
 				rel = iss.File
 			}
