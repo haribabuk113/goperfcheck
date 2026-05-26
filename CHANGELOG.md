@@ -10,6 +10,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Fixed
+- **Every file path in terminal output is now Ctrl+Clickable to open in editor**:
+  OSC 8 escape-code hyperlinks were interfering with VS Code's built-in terminal
+  link detection. VS Code auto-detects plain-text `path:line:col` patterns and
+  opens them in the editor on Ctrl+Click; wrapping the same text in OSC 8
+  sequences suppressed that detection without reliably replacing it.
+
+  Fix: removed OSC 8 wrapping from `fileLink` entirely. Both the file header
+  (`📁 rel/path`) and per-issue locations (`rel/path:line:col`) are now emitted
+  as plain text. VS Code (and any terminal with file-link detection) makes every
+  path Ctrl+Clickable — the header opens the file, each issue location jumps to
+  the exact line and column.
+
 - **`-file` with a subdirectory path now shows the relative path in output**:
   previously, `-file dir/file.go` displayed the full absolute path (e.g.
   `/home/user/project/dir/file.go`) instead of the expected `dir/file.go`.
