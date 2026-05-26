@@ -10,6 +10,22 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Fixed
+- **`MemPrealloc` now correctly flags unpreallocated slices in all functions**:
+  preallocated-slice tracking was scoped to the entire file instead of each
+  function. The fix-suppression check (`isPreallocatedBefore`) compared raw
+  `token.Pos` values across function boundaries: if function `f1` declared
+  `out := make([]string, 0, len(items))` and a later function `f2` declared
+  `var out []string`, the checker treated `f2`'s `out` as already-preallocated
+  because `f1`'s position was numerically smaller than `f2`'s loop position.
+  `f2`'s `append(out, v)` was silently skipped — the exact false negative
+  reported when comparing against golangci-lint's `prealloc` linter.
+
+  Fix: `checkAppendInLoops` now enters each `FuncDecl` and `FuncLit` as its
+  own scope and calls `collectPreallocatedSlices` on that function's body only.
+  The inner loop walk skips nested function literals (they are visited as
+  separate scopes by the outer `ast.Inspect`). The result is per-function
+  prealloc tracking with correct isolation across closures and methods.
+
 - **Every file path in terminal output is now Ctrl+Clickable to open in editor**:
   OSC 8 escape-code hyperlinks were interfering with VS Code's built-in terminal
   link detection. VS Code auto-detects plain-text `path:line:col` patterns and

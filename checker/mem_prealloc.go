@@ -51,24 +51,49 @@ func (c *MemPreallocChecker) Check(fset *token.FileSet, file *ast.File) []Issue 
 	return issues
 }
 
-// checkAppendInLoops walks every for/range loop in root and reports append()
-// calls found directly inside that loop body (not in nested loops).
-// The capacity hint is derived from the loop structure itself.
-// Variables already declared with make([]T, _, cap) before the loop are skipped
-// so that a second run after -fix does not re-flag already-fixed code.
+// checkAppendInLoops walks every function body in root and, within each
+// function scope, reports append() calls in for/range loops whose accumulator
+// slice has no capacity hint.
+//
+// Preallocated-slice tracking is scoped per function: collecting declarations
+// from the whole file would cause a false-negative whenever two functions share
+// a variable name and the first function preallocates it — the global position
+// check would incorrectly suppress the issue in the second function.
 func (c *MemPreallocChecker) checkAppendInLoops(fset *token.FileSet, root ast.Node) []Issue {
-	prealloc := collectPreallocatedSlices(root)
 	var issues []Issue
 	ast.Inspect(root, func(n ast.Node) bool {
-		switch loop := n.(type) {
-		case *ast.RangeStmt:
-			hint := rangeExprHint(loop.X)
-			issues = append(issues, c.appendIssuesInBody(fset, loop.Body, hint, prealloc, loop.Pos())...)
-		case *ast.ForStmt:
-			hint := forLoopCapHint(loop)
-			issues = append(issues, c.appendIssuesInBody(fset, loop.Body, hint, prealloc, loop.Pos())...)
+		// Enter each function body as its own scope.
+		var body *ast.BlockStmt
+		switch fn := n.(type) {
+		case *ast.FuncDecl:
+			body = fn.Body
+		case *ast.FuncLit:
+			body = fn.Body
+		default:
+			return true // keep walking to find function nodes
 		}
-		return true
+		if body == nil {
+			return true
+		}
+		// Collect preallocated slices declared within THIS function only.
+		prealloc := collectPreallocatedSlices(body)
+		// Walk loops directly inside this function, skipping nested function
+		// literals — the outer ast.Inspect visits them as separate scopes.
+		ast.Inspect(body, func(inner ast.Node) bool {
+			if _, isFunc := inner.(*ast.FuncLit); isFunc {
+				return false // nested closure — handled by outer Inspect
+			}
+			switch loop := inner.(type) {
+			case *ast.RangeStmt:
+				hint := rangeExprHint(loop.X)
+				issues = append(issues, c.appendIssuesInBody(fset, loop.Body, hint, prealloc, loop.Pos())...)
+			case *ast.ForStmt:
+				hint := forLoopCapHint(loop)
+				issues = append(issues, c.appendIssuesInBody(fset, loop.Body, hint, prealloc, loop.Pos())...)
+			}
+			return true
+		})
+		return true // continue outer walk so nested FuncLit nodes are visited
 	})
 	return issues
 }

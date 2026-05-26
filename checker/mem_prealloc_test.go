@@ -282,6 +282,108 @@ func f(items []string) []string {
 // tmp would help because it is discarded at the end of each iteration.
 // The outer results slice is never directly appended to inside the loop.
 // This test pins the current behaviour so the limitation remains visible.
+// TestMemPreallocCrossFunctionScope verifies that preallocated-slice tracking is
+// scoped per function. A variable named "out" preallocated in f1 must not
+// suppress the issue for a different "out" that is NOT preallocated in f2.
+// This was the root cause of false negatives vs golangci-lint's prealloc linter.
+func TestMemPreallocCrossFunctionScope(t *testing.T) {
+	tests := []struct {
+		name      string
+		src       string
+		wantSlice int // expected slice_cap issues
+	}{
+		{
+			name: "same var name: preallocated in f1, unpreallocated in f2 — f2 must be flagged",
+			src: `package p
+func f1(items []string) []string {
+	out := make([]string, 0, len(items))
+	for _, v := range items { out = append(out, v) }
+	return out
+}
+func f2(items []string) []string {
+	var out []string
+	for _, v := range items { out = append(out, v) }
+	return out
+}`,
+			wantSlice: 1,
+		},
+		{
+			name: "same var name in three functions — only unpreallocated ones flagged",
+			src: `package p
+func a(items []string) []string {
+	out := make([]string, 0, len(items))
+	for _, v := range items { out = append(out, v) }
+	return out
+}
+func b(items []string) []string {
+	var out []string
+	for _, v := range items { out = append(out, v) }
+	return out
+}
+func c(items []string) []string {
+	var out []string
+	for _, v := range items { out = append(out, v) }
+	return out
+}`,
+			wantSlice: 2, // b and c
+		},
+		{
+			name: "nested closure inherits no preallocated state from outer function",
+			src: `package p
+func outer(items []string) []string {
+	out := make([]string, 0, len(items))
+	inner := func(sub []string) []string {
+		var out []string
+		for _, v := range sub { out = append(out, v) }
+		return out
+	}
+	return inner(out)
+}`,
+			wantSlice: 1, // inner's out must be flagged
+		},
+		{
+			name: "method and standalone function with same var name",
+			src: `package p
+type T struct{}
+func (t T) Method(items []string) []string {
+	result := make([]string, 0, len(items))
+	for _, v := range items { result = append(result, v) }
+	return result
+}
+func standalone(items []string) []string {
+	var result []string
+	for _, v := range items { result = append(result, v) }
+	return result
+}`,
+			wantSlice: 1, // standalone must be flagged, Method must not
+		},
+	}
+
+	c := &MemPreallocChecker{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			f, err := parser.ParseFile(fset, "test.go", tt.src, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			issues := c.Check(fset, f)
+			var sliceIssues []Issue
+			for _, iss := range issues {
+				if iss.Fix != nil && iss.Fix.Kind == "slice_cap" {
+					sliceIssues = append(sliceIssues, iss)
+				}
+			}
+			if len(sliceIssues) != tt.wantSlice {
+				t.Errorf("got %d slice issue(s), want %d", len(sliceIssues), tt.wantSlice)
+				for _, iss := range sliceIssues {
+					t.Logf("  line %d: %s", iss.Line, iss.Message)
+				}
+			}
+		})
+	}
+}
+
 func TestMemPreallocFalsePositive_LoopLocalSlice(t *testing.T) {
 	src := `package p
 func process(items []string) []string {
